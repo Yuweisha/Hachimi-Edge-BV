@@ -9,7 +9,7 @@ use crate::{core::{gui, plugin_api::Plugin, updater}, gui_impl, hachimi_impl, il
 
 use super::{game::{Game, Region}, ipc, plurals, template, template_filters, tl_repo, utils, Error, Interceptor};
 
-pub const REPO_PATH: &str = "kairusds/Hachimi-Edge";
+pub const REPO_PATH: &str = "Yuweisha/Hachimi-Edge-BV";
 pub const GITHUB_API: &str = "https://api.github.com/repos";
 pub const CODEBERG_API: &str = "https://codeberg.org/api/v1/repos";
 pub const WEBSITE_URL: &str = "https://hachimi.noccu.art";
@@ -747,13 +747,16 @@ pub enum ShortcutOption {
     #[default]
     ThemeEditor,
     FreeCamera,
-    LiveVocalsSwap
+    LiveVocalsSwap,
+    /// 直接切换自由视角开关（不开设置窗口）。
+    FreeCameraToggle
 }
 
 impl ShortcutOption {
-    pub const ALL: [ShortcutOption; 3] = [
+    pub const ALL: [ShortcutOption; 4] = [
         ShortcutOption::ThemeEditor,
         ShortcutOption::FreeCamera,
+        ShortcutOption::FreeCameraToggle,
         ShortcutOption::LiveVocalsSwap
     ];
 }
@@ -763,6 +766,62 @@ pub struct ShortcutEntry {
     pub option: ShortcutOption,
     #[serde(default)]
     pub key: i32
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub struct GlobalCharReplaceEntry {
+    #[serde(default, alias = "origCharId")]
+    pub orig_char_id: i32,
+    #[serde(default, alias = "newChrId", alias = "newCharId")]
+    pub new_char_id: i32,
+    #[serde(default, alias = "newClothId")]
+    pub new_cloth_id: i32,
+    #[serde(default, alias = "replaceMini")]
+    pub replace_mini: bool,
+}
+
+impl Default for GlobalCharReplaceEntry {
+    fn default() -> Self {
+        Self {
+            orig_char_id: 0,
+            new_char_id: 0,
+            new_cloth_id: 0,
+            replace_mini: false,
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub struct GlobalCharReplaceConfig {
+    #[serde(default)]
+    pub enable: bool,
+    #[serde(default = "Config::default_true")]
+    pub replace_universal: bool,
+    #[serde(default)]
+    pub song_force_chara: i32,
+    ///
+    #[serde(default)]
+    pub replace_in_cutscene: bool,
+    #[serde(default = "Config::default_true")]
+    pub auto_dress: bool,
+    #[serde(default)]
+    pub replace_model_in_cutscene: bool,
+    #[serde(default)]
+    pub data: Vec<GlobalCharReplaceEntry>,
+}
+
+impl Default for GlobalCharReplaceConfig {
+    fn default() -> Self {
+        Self {
+            enable: false,
+            replace_universal: true,
+            song_force_chara: 0,
+            replace_in_cutscene: false,
+            auto_dress: true,
+            replace_model_in_cutscene: false,
+            data: Vec::new(),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -950,6 +1009,32 @@ pub struct Config {
     #[serde(default)]
     pub disabled_hooks: FnvHashSet<String>,
 
+    /// Global character replacement, ported from Trainers' Legend G.
+    /// Also accepts the original `replaceGlobalChar` key from TLG's config.json.
+    #[serde(default, alias = "replaceGlobalChar")]
+    pub replace_global_char: GlobalCharReplaceConfig,
+
+    #[serde(default = "Config::default_bv_unlock_all")]
+    pub bv_unlock_all: bool,
+
+    #[serde(default = "Config::default_cutin_fov_scale")]
+    pub cutin_fov_scale: f32,
+
+    #[serde(default = "Config::default_cutin_progress_slider")]
+    pub cutin_progress_slider: bool,
+
+    #[serde(default = "Config::default_cutin_block_ui_events")]
+    pub cutin_block_ui_events: bool,
+
+    #[serde(default)]
+    pub cutin_first_person: bool,
+
+    #[serde(default)]
+    pub cutin_free_camera: bool,
+
+    #[serde(default = "Config::default_intercept_error_dialog")]
+    pub intercept_error_dialog: bool,
+
     // theme settings
     #[serde(default = "Config::default_ui_accent")]
     pub ui_accent_color: egui::Color32,
@@ -987,6 +1072,11 @@ impl Config {
     fn default_champions_live_resource_id() -> i32 { 15 }
     fn default_champions_live_year() -> i32 { 2025 }
     pub fn default_ui_accent() -> egui::Color32 { egui::Color32::from_rgb(100, 150, 240) }
+    pub fn default_bv_unlock_all() -> bool { true }
+    pub fn default_cutin_fov_scale() -> f32 { 1.0 }
+    pub fn default_cutin_progress_slider() -> bool { true }
+    pub fn default_cutin_block_ui_events() -> bool { true }
+    pub fn default_intercept_error_dialog() -> bool { true }
     pub fn default_window_fill() -> egui::Color32 { egui::Color32::from_rgba_premultiplied(27, 27, 27, 220) }
     pub fn default_panel_fill() -> egui::Color32 { egui::Color32::from_rgba_premultiplied(27, 27, 27, 220) }
     pub fn default_extreme_bg() -> egui::Color32 { egui::Color32::from_rgb(15, 15, 15) }
@@ -1489,5 +1579,67 @@ impl Default for SkillFormatting {
             name_short_lines: 1,
             name_short_mult: 1.0,
             name_sp_mult: 1.0 }
+    }
+}
+
+#[cfg(test)]
+mod global_char_replace_tests {
+    use super::{Config, GlobalCharReplaceConfig};
+
+    /// The `replaceGlobalChar` block from Trainers' Legend G's config.json must
+    /// deserialize as-is, camelCase keys included.
+    #[test]
+    fn parses_tlg_replace_global_char_block() {
+        let json = r#"{
+            "enable": false,
+            "data": [
+                {
+                    "origCharId": 1046,
+                    "newChrId": 1030,
+                    "newClothId": 103001,
+                    "replaceMini": false
+                }
+            ]
+        }"#;
+
+        let config: GlobalCharReplaceConfig = serde_json::from_str(json).expect("deserialize");
+        assert!(!config.enable);
+        assert!(config.replace_universal, "replaceUniversal defaults to true");
+        assert_eq!(config.data.len(), 1);
+
+        let entry = &config.data[0];
+        assert_eq!(entry.orig_char_id, 1046);
+        assert_eq!(entry.new_char_id, 1030);
+        assert_eq!(entry.new_cloth_id, 103001);
+        assert!(!entry.replace_mini);
+    }
+
+    /// The top-level config key from TLG is accepted next to Hachimi's own
+    /// snake_case spelling.
+    #[test]
+    fn config_accepts_tlg_top_level_key() {
+        let json = r#"{
+            "replaceGlobalChar": {
+                "enable": true,
+                "data": [
+                    { "origCharId": 1, "newChrId": 2, "newClothId": 201, "replaceMini": true }
+                ]
+            }
+        }"#;
+
+        let config: Config = serde_json::from_str(json).expect("deserialize");
+        assert!(config.replace_global_char.enable);
+        assert_eq!(config.replace_global_char.data.len(), 1);
+        assert!(config.replace_global_char.data[0].replace_mini);
+    }
+
+    /// Missing keys fall back to the defaults: disabled, universal dress
+    /// replacement on, no rules.
+    #[test]
+    fn defaults_when_absent() {
+        let config: Config = serde_json::from_str("{}").expect("deserialize");
+        assert!(!config.replace_global_char.enable);
+        assert!(config.replace_global_char.replace_universal);
+        assert!(config.replace_global_char.data.is_empty());
     }
 }

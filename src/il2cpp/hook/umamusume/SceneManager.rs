@@ -41,6 +41,8 @@ impl_addr_wrapper_fn!(GetCurrentSceneId, GETCURRENTSCENEID_ADDR, SceneId, this: 
 
 static SCENE_ID_CACHE: atomic::AtomicI32 = atomic::AtomicI32::new(0);
 
+
+
 type AlterUpdateFn = extern "C" fn(this: *mut Il2CppObject);
 extern "C" fn AlterUpdate(this: *mut Il2CppObject) {
     get_orig_fn!(AlterUpdate, AlterUpdateFn)(this);
@@ -122,6 +124,75 @@ extern "C" fn ChangeViewOther(
         callback_on_change_view_accept, force_change
     );
     ChangeViewCommon(next_view_id);
+}
+
+
+/// 强制切回大厅（Home view），用于场景卡死时脱身。
+/// 比回标题快，也不用重新登录。
+pub fn force_goto_home() {
+    let this = instance();
+    if this.is_null() {
+        warn!("[recover] force_goto_home: SceneManager 实例为空");
+        return;
+    }
+
+    let jp = Hachimi::instance().game.region == Region::Japan;
+    let addr = if jp {
+        get_method_addr(class(), c"ChangeView", 7)
+    }
+    else {
+        get_method_addr(class(), c"ChangeView", 5)
+    };
+    if addr == 0 {
+        warn!("[recover] force_goto_home: ChangeView 地址未找到");
+        return;
+    }
+
+    // 游戏卡在加载态时，NowLoading 遮罩会一直挂着并吞掉输入；先收掉
+    super::NowLoading::force_hide();
+
+    // 退出自由相机场景，否则它继续截获输入，回到大厅后点不动
+    #[cfg(target_os = "windows")]
+    {
+        use crate::windows::free_camera::{self, CameraScene};
+        // 两个场景都显式结束：只按 free_camera::scene() 判断会漏掉状态不同步的情况，
+        // 而残留的 scene 会让 is_game_input_capture_active() 继续为真，鼠标点击被吞。
+        for s in [CameraScene::Live, CameraScene::Race] {
+            free_camera::end_scene(s);
+        }
+        warn!(
+            "[recover] force_goto_home: 已重置自由相机（当前 scene={:?}）",
+            free_camera::scene()
+        );
+    }
+
+    warn!("[recover] force_goto_home -> Home (view {})", ViewId::Home as i32);
+    unsafe {
+        if jp {
+            let f: ChangeViewJpfn = std::mem::transmute(addr);
+            f(
+                this,
+                ViewId::Home as i32,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                true,
+                true,
+                0.0,
+            );
+        }
+        else {
+            let f: ChangeViewOtherfn = std::mem::transmute(addr);
+            f(
+                this,
+                ViewId::Home as i32,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                true,
+            );
+        }
+    }
 }
 
 pub fn init(umamusume: *const Il2CppImage) {

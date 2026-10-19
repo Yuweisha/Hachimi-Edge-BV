@@ -263,6 +263,7 @@ pub enum CameraScene {
     None,
     Live,
     Race,
+    CutIn,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -283,6 +284,14 @@ impl Vec3 {
 
     fn len(self) -> f32 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+    }
+
+    fn cross(self, rhs: Self) -> Self {
+        Self {
+            x: self.y * rhs.z - self.z * rhs.y,
+            y: self.z * rhs.x - self.x * rhs.z,
+            z: self.x * rhs.y - self.y * rhs.x,
+        }
     }
 
     fn normalized(self) -> Self {
@@ -363,6 +372,38 @@ impl Quat {
 
     fn conjugate(self) -> Self {
         Self { w: self.w, x: -self.x, y: -self.y, z: -self.z }
+    }
+
+    /// 四元数乘法（this * rhs）
+    fn mul(self, r: Self) -> Self {
+        Self {
+            w: self.w * r.w - self.x * r.x - self.y * r.y - self.z * r.z,
+            x: self.w * r.x + self.x * r.w + self.y * r.z - self.z * r.y,
+            y: self.w * r.y - self.x * r.z + self.y * r.w + self.z * r.x,
+            z: self.w * r.z + self.x * r.y - self.y * r.x + self.z * r.w,
+        }
+    }
+
+    /// Unity 的 Quaternion.Euler(pitch, yaw, roll)，角度制
+    fn from_euler(pitch: f32, yaw: f32, roll: f32) -> Self {
+        let (sp, cp) = ((pitch.to_radians() * 0.5).sin(), (pitch.to_radians() * 0.5).cos());
+        let (sy, cy) = ((yaw.to_radians() * 0.5).sin(), (yaw.to_radians() * 0.5).cos());
+        let (sr, cr) = ((roll.to_radians() * 0.5).sin(), (roll.to_radians() * 0.5).cos());
+        Self {
+            w: cy * cp * cr + sy * sp * sr,
+            x: cy * sp * cr + sy * cp * sr,
+            y: sy * cp * cr - cy * sp * sr,
+            z: cy * cp * sr - sy * sp * cr,
+        }
+    }
+
+    /// 用四元数旋转向量
+    fn rotate(self, v: Vec3) -> Vec3 {
+        let q = self.normalized();
+        let u = Vec3::new(q.x, q.y, q.z);
+        let uv = u.cross(v);
+        let uuv = u.cross(uv);
+        v + uv * (2.0 * q.w) + uuv * 2.0
     }
 
     fn dot(self, rhs: Self) -> f32 {
@@ -486,6 +527,11 @@ struct FreeCameraState {
     camera_pos: Vec3,
     camera_look_at: Vec3,
     camera_rotation: Option<Quat>,
+    /// 进入 cutin 时记录的相机基准旋转（游戏自己的朝向），拖动只在其上叠加增量
+    cutin_base: Option<Quat>,
+    /// 由 cutin_base 预先算出的前/右向量（避免持锁时再取锁）
+    cutin_fwd: Vec3,
+    cutin_right: Vec3,
     yaw: f32,
     pitch: f32,
     live_fov: f32,
@@ -538,6 +584,9 @@ impl FreeCameraState {
             camera_pos: Vec3::default(),
             camera_look_at: Vec3::default(),
             camera_rotation: None,
+            cutin_base: None,
+            cutin_fwd: Vec3::new(0.0, 0.0, -1.0),
+            cutin_right: Vec3::new(1.0, 0.0, 0.0),
             yaw: 0.0,
             pitch: 0.0,
             live_fov: config.live_fov,
@@ -754,8 +803,9 @@ pub fn reload_runtime_config() {
 }
 
 pub fn is_enabled() -> bool {
-    Hachimi::instance().config.load().windows.free_camera.enabled &&
-        !LIVE_UNSUPPORTED.load(Ordering::Acquire)
+    let config = Hachimi::instance().config.load();
+    config.windows.free_camera.enabled
+        && !LIVE_UNSUPPORTED.load(Ordering::Acquire)
 }
 
 pub fn set_live_music_id(music_id: i32) {
@@ -787,7 +837,7 @@ pub fn is_game_input_capture_active() -> bool {
         return false;
     }
 
-    matches!(STATE.lock().unwrap().scene, CameraScene::Live | CameraScene::Race)
+    matches!(STATE.lock().unwrap().scene, CameraScene::Live | CameraScene::Race | CameraScene::CutIn)
 }
 
 pub fn overlay_message() -> Option<(String, f32)> {
@@ -880,9 +930,9 @@ pub fn scene() -> CameraScene {
 
 pub fn is_scene_enabled(scene: CameraScene) -> bool {
     let config = Hachimi::instance().config.load();
-    config.windows.free_camera.enabled &&
-        !LIVE_UNSUPPORTED.load(Ordering::Acquire) &&
-        STATE.lock().unwrap().scene == scene
+    config.windows.free_camera.enabled
+        && !LIVE_UNSUPPORTED.load(Ordering::Acquire)
+        && STATE.lock().unwrap().scene == scene
 }
 
 pub fn mode() -> FreeCameraMode {
@@ -944,6 +994,45 @@ pub fn camera_look_at() -> Vector3_t {
     STATE.lock().unwrap().camera_look_at.to_vector3()
 }
 
+
+/// 由朝向向量算四元数（等价 UnityEngine.Quaternion.LookRotation，up = +Y）。
+pub fn look_at(transform: *mut Il2CppObject, target: Vector3_t) {
+    crate::il2cpp::hook::UnityEngine_CoreModule::Transform::look_at(transform, target);
+}
+
+pub fn look_rotation(dir: Vector3_t) -> Option<Quaternion_t> {
+    // 保留旧接口（供 Race 场景使用），仅在无 look_at 时兜底
+    let len = (dir.x * dir.x + dir.y * dir.y + dir.z * dir.z).sqrt();
+    if len < 1e-5 {
+        return None;
+    }
+    let f = Vec3::new(dir.x / len, dir.y / len, dir.z / len);
+    let yaw = f.x.atan2(-f.z);
+    let pitch = f.y.clamp(-1.0, 1.0).asin();
+    let (sy, cy) = ((yaw * 0.5).sin(), (yaw * 0.5).cos());
+    let (sp, cp) = ((pitch * 0.5).sin(), (pitch * 0.5).cos());
+    Some(Quaternion_t {
+        w: cy * cp,
+        x: -cy * sp,
+        y: sy * cp,
+        z: sy * sp,
+    })
+}
+
+
+/// cutin 相机基准旋转（进入时记录的朝游戏相机朝向）
+pub fn cutin_base_rotation() -> Option<Quaternion_t> {
+    STATE.lock().unwrap().cutin_base.map(|q| q.to_quaternion())
+}
+
+/// 在当前 cutin 基准上叠加 yaw/pitch 增量，得到最终朝向
+pub fn cutin_rotation_with_delta() -> Option<Quaternion_t> {
+    let state = STATE.lock().unwrap();
+    let base = state.cutin_base?;
+    let delta = Quat::from_euler(state.pitch, state.yaw, 0.0);
+    Some(base.mul(delta).normalized().to_quaternion())
+}
+
 pub fn camera_rotation() -> Option<Quaternion_t> {
     STATE.lock().unwrap().camera_rotation.map(|rot| rot.to_quaternion())
 }
@@ -962,7 +1051,7 @@ pub fn fov_for_scene(scene: CameraScene) -> Option<f32> {
     Some(match scene {
         CameraScene::Live => state.live_fov,
         CameraScene::Race => state.race_fov,
-        CameraScene::None => return None,
+        CameraScene::CutIn | CameraScene::None => return None,
     })
 }
 
@@ -1020,6 +1109,50 @@ pub fn set_race_active() {
     }
 
     STATE.lock().unwrap().set_scene(CameraScene::Race, &config.windows.free_camera);
+}
+
+
+/// 首次进入 cutin 自由视角时，把相机放到头部位置（否则会从世界原点开始）。
+pub fn ensure_cutin_start(pos: Vector3_t, rot: Quaternion_t) {
+    static INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if INIT.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let mut state = STATE.lock().unwrap();
+    state.camera_pos = Vec3::from(pos);
+    let q = Quat::from_quaternion(rot);
+    state.camera_rotation = Some(q);
+    state.cutin_base = Some(q);
+    state.cutin_fwd = q.rotate(Vec3::new(0.0, 0.0, -1.0));
+    state.cutin_right = q.rotate(Vec3::new(1.0, 0.0, 0.0));
+    // 关键：camera_look_at 默认为 (0,0,0)，会让移动方向始终指向世界原点（走弧线）。
+    // 用游戏相机的前方向铺一个 20 米远的目标点。
+    state.camera_look_at = state.camera_pos + state.cutin_fwd * 20.0;
+    state.live_fov = state.live_fov.max(30.0);
+}
+
+
+/// cutin 自由视角没有独立的窗口开关，勾选该项时强制让 tick() 生效。
+pub fn force_enable_for_cutin() {
+    let hachimi = Hachimi::instance();
+    if hachimi.config.load().windows.free_camera.enabled {
+        return;
+    }
+    let mut config = hachimi.config.load().as_ref().clone();
+    config.windows.free_camera.enabled = true;
+    let _ = hachimi.config.store(std::sync::Arc::new(config));
+    warn!("[free_camera] force enabled for cutin");
+}
+
+pub fn begin_cutin_scene() {
+    let config = Hachimi::instance().config.load();
+    let mut state = STATE.lock().unwrap();
+    if state.scene == CameraScene::CutIn {
+        return;
+    }
+    state.scene = CameraScene::CutIn;
+    state.reset_with_config(&config.windows.free_camera);
+    state.last_tick = Instant::now();
 }
 
 pub fn end_scene(scene: CameraScene) {
@@ -1653,7 +1786,8 @@ pub fn wants_windows_input_capture() -> bool {
 }
 
 pub fn on_mouse_button(right_down: bool) {
-    if !is_game_input_capture_active() {
+    let cutin_free = Hachimi::instance().config.load().cutin_free_camera;
+    if !is_game_input_capture_active() && !cutin_free {
         return;
     }
 
@@ -1664,7 +1798,8 @@ pub fn on_mouse_button(right_down: bool) {
 
 pub fn on_mouse_move(x: i32, y: i32) {
     let config = Hachimi::instance().config.load();
-    if !config.windows.free_camera.enabled {
+    let cutin_free = config.cutin_free_camera;
+    if !config.windows.free_camera.enabled && !cutin_free {
         return;
     }
 
@@ -1707,10 +1842,10 @@ pub fn tick() {
         state.reset_with_config(config);
     }
     state.last_enabled = config.enabled;
-    if !config.enabled {
+    if !config.enabled && !Hachimi::instance().config.load().cutin_free_camera {
         return;
     }
-    if !matches!(state.scene, CameraScene::Live | CameraScene::Race) {
+    if !matches!(state.scene, CameraScene::Live | CameraScene::Race | CameraScene::CutIn) {
         state.last_tick = Instant::now();
         return;
     }
@@ -1730,9 +1865,31 @@ pub fn tick() {
     let step_scale = (delta / 0.01).clamp(0.25, 4.0);
     let move_step = match state.scene {
         CameraScene::Race => config.race_move_step,
+        // cutin 演出时长很短，步长压到 35% 更好控
+        CameraScene::CutIn => config.live_move_step * 0.35,
         _ => config.live_move_step,
     } * step_scale;
     let look_step = config.look_step * step_scale;
+
+    // 空格/左 Ctrl 常被游戏抢先消费，WM_KEYDOWN 到不了这里；直接读物理键状态补上
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LCONTROL, VK_SPACE};
+        let up = unsafe { (GetAsyncKeyState(VK_SPACE.0 as i32) as u16 & 0x8000) != 0 };
+        let down = unsafe { (GetAsyncKeyState(VK_LCONTROL.0 as i32) as u16 & 0x8000) != 0 };
+        if up || down {
+            static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+            if N.fetch_add(1, Ordering::Relaxed) % 30 == 0 {
+                warn!("[cutin-key] space={} ctrl={}", up, down);
+            }
+        }
+        if up {
+            state.key_state.up = true;
+        }
+        if down {
+            state.key_state.down = true;
+        }
+    }
 
     apply_input_locked(&mut state, config, move_step, look_step);
 }
@@ -1789,7 +1946,14 @@ fn apply_input_locked(
         move_side_locked(state, side * move_step);
     }
     if vertical.abs() > f32::EPSILON {
+        static VN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        if VN.fetch_add(1, Ordering::Relaxed) % 30 == 0 {
+            warn!("[cutin-vert] vertical={} before_y={:.3} step={:.3}", vertical, state.camera_pos.y, move_step);
+        }
         move_vertical_locked(state, vertical * move_step);
+        if VN.load(Ordering::Relaxed) % 30 == 1 {
+            warn!("[cutin-vert] after_y={:.3}", state.camera_pos.y);
+        }
     }
     if look_x.abs() > f32::EPSILON || look_y.abs() > f32::EPSILON {
         apply_look_delta_locked(state, look_x * look_step, look_y * look_step, false);
@@ -1812,15 +1976,14 @@ fn deadzone(value: f32, deadzone: f32) -> f32 {
 fn move_forward_locked(state: &mut FreeCameraState, amount: f32) {
     match state.mode {
         FreeCameraMode::Free => {
-            let yaw = state.yaw.to_radians();
-            let pitch = state.pitch.to_radians();
-            let dir = Vec3::new(
-                yaw.sin() * pitch.cos(),
-                pitch.sin(),
-                -yaw.cos() * pitch.cos(),
-            );
-            state.camera_pos = state.camera_pos + dir * amount;
-            state.camera_look_at = state.camera_look_at + dir * amount;
+            // cutin 用游戏相机基准的前方向；其它场景用 look_at 方向
+            let mut d = (state.camera_look_at - state.camera_pos).normalized();
+            if d.len() < 1e-5 {
+                d = Vec3::new(0.0, 0.0, -1.0);
+            }
+            let f = d;
+            state.camera_pos = state.camera_pos + f * amount;
+            state.camera_look_at = state.camera_look_at + f * amount;
         },
         FreeCameraMode::SelfieStick => {
             let head_selfie = Hachimi::instance().config.load().windows.free_camera.selfie_use_head_transform;
@@ -1847,8 +2010,14 @@ fn move_forward_locked(state: &mut FreeCameraState, amount: f32) {
 fn move_side_locked(state: &mut FreeCameraState, amount: f32) {
     match state.mode {
         FreeCameraMode::Free => {
-            let yaw = state.yaw.to_radians();
-            let dir = Vec3::new(yaw.cos(), 0.0, yaw.sin());
+            let mut f = (state.camera_look_at - state.camera_pos).normalized();
+            if f.len() < 1e-5 {
+                f = Vec3::new(0.0, 0.0, -1.0);
+            }
+            let mut dir = Vec3::new(-f.z, 0.0, f.x).normalized();
+            if dir.len() < 1e-5 {
+                dir = Vec3::new(1.0, 0.0, 0.0);
+            }
             state.camera_pos = state.camera_pos + dir * amount;
             state.camera_look_at = state.camera_look_at + dir * amount;
         },
@@ -1899,7 +2068,7 @@ fn apply_look_delta_locked(state: &mut FreeCameraState, yaw_delta: f32, pitch_de
             if state.yaw <= -360.0 {
                 state.yaw += 720.0;
             }
-            state.pitch = (state.pitch + pitch_delta).clamp(-89.99, 89.99);
+            state.pitch += pitch_delta;
             state.update_look_from_angles();
         },
         FreeCameraMode::SelfieStick => {
@@ -1944,7 +2113,7 @@ fn change_fov_locked(state: &mut FreeCameraState, value: f32) {
     match state.scene {
         CameraScene::Live => state.live_fov = (state.live_fov + value).clamp(1.0, 120.0),
         CameraScene::Race => state.race_fov = (state.race_fov + value).clamp(1.0, 120.0),
-        CameraScene::None => (),
+        CameraScene::CutIn | CameraScene::None => (),
     }
 }
 

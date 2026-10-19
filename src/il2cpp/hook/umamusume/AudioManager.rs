@@ -6,8 +6,11 @@ use crate::{
             AudioPlayback::{self, AudioPlayback_t},
             AtomSourceEx,
         },
-        ext::Il2CppStringExt,
-        symbols::{get_method_addr, get_field_from_name, Array, SingletonLike, Thread},
+        ext::{Il2CppStringExt, StringExt},
+        symbols::{
+            get_assembly_image, get_class, get_method_addr, get_field_from_name,
+            Array, SingletonLike, Thread
+        },
         types::*
     }
 };
@@ -49,6 +52,45 @@ def_field_object_accessors!(get__atomSourceArrayBGM, set__atomSourceArrayBGM, _A
 
 def_method_wrapper_fn!(GetCueLength, GET_CUE_LENGTH_ADDR, f32, this: *mut Il2CppObject, cue_sheet: *mut Il2CppString, cue_id: i32);
 def_method_wrapper_fn!(GetVolume, GET_VOLUME_ADDR, f32, category: Category);
+
+def_method_wrapper_fn!(IsAvailableCueSheet, IS_AVAILABLE_CUE_SHEET_ADDR, bool, this: *mut Il2CppObject, cue_sheet: *mut Il2CppString);
+
+static mut ADD_CUE_BY_NAME_ADDR: usize = 0;
+
+///
+///
+pub fn load_cue_sheet(cue_name: &str) -> bool {
+    if unsafe { ADD_CUE_BY_NAME_ADDR } == 0 {
+        return false;
+    }
+    let manager = instance();
+    if manager.is_null() {
+        return false;
+    }
+    let cue = cue_name.to_il2cpp_string();
+    if cue.is_null() {
+        return false;
+    }
+    let orig = get_orig_fn!(AddCueSheetByCueName, AddCueSheetByCueNameFn);
+    !orig(manager, cue).is_null()
+}
+
+///
+///
+pub fn cue_sheet_available(sheet: &str) -> bool {
+    if unsafe { IS_AVAILABLE_CUE_SHEET_ADDR } == 0 {
+        return true;
+    }
+    let manager = instance();
+    if manager.is_null() {
+        return true;
+    }
+    let cue = sheet.to_il2cpp_string();
+    if cue.is_null() {
+        return true;
+    }
+    IsAvailableCueSheet(manager, cue)
+}
 
 pub fn race_slider_music_base() -> bool {
     let audio_manager = instance();
@@ -161,6 +203,14 @@ pub fn resync_race_music(race_manager: *mut Il2CppObject, target_time: f32) -> b
     })
 }
 
+fn cue_str(p: *mut Il2CppString) -> String {
+    if p.is_null() {
+        String::new()
+    } else {
+        unsafe { &*p }.as_utf16str().to_string()
+    }
+}
+
 // Cute.Cri.Audio RequestCueInfo
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq)]
@@ -171,7 +221,7 @@ pub struct RequestCueInfo {
 }
 
 // Cute.Cri SoundGroup
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(i32)]
 pub enum SoundGroup {
     Bgm = 0,
@@ -186,6 +236,13 @@ type PlayInternalFn = extern "C" fn(this: *mut Il2CppObject, group: SoundGroup,
 extern "C" fn PlayInternal(this: *mut Il2CppObject, group: SoundGroup,
     cue_info: *mut RequestCueInfo, play_param: *mut Il2CppObject, stop_type: i32
 ) -> AudioPlayback_t {
+    if group == SoundGroup::Voice && !cue_info.is_null() {
+        let new_sheet = crate::core::voice_replace::rewrite_cue_sheet(unsafe { *cue_info }.CueSheetName);
+        if let Some(new_sheet) = new_sheet {
+            unsafe { (*cue_info).CueSheetName = new_sheet; }
+        }
+    }
+
     let result = get_orig_fn!(PlayInternal, PlayInternalFn)(this, group, cue_info, play_param, stop_type);
 
     if group == SoundGroup::Voice && !cue_info.is_null() && Hachimi::instance().config.load().caption.caption_enable {
@@ -238,16 +295,169 @@ extern "C" fn PlayInternal(this: *mut Il2CppObject, group: SoundGroup,
     result
 }
 
+// private AudioPlayback _prepareSong(Int32, RequestCueInfo, PlayParameters, AutoStopType) { }
+//
+type PrepareSongFn = extern "C" fn(this: *mut Il2CppObject, part: i32,
+    cue_info: *mut RequestCueInfo, play_param: *mut Il2CppObject, stop_type: i32
+) -> AudioPlayback_t;
+extern "C" fn PrepareSong(this: *mut Il2CppObject, part: i32,
+    cue_info: *mut RequestCueInfo, play_param: *mut Il2CppObject, stop_type: i32
+) -> AudioPlayback_t {
+    if !cue_info.is_null() {
+        let force = Hachimi::instance().config.load().replace_global_char.song_force_chara;
+        let new_sheet = if force != 0 {
+            crate::core::voice_replace::rewrite_cue_sheet_to(
+                unsafe { *cue_info }.CueSheetName, force
+            )
+        } else {
+            crate::core::voice_replace::rewrite_cue_sheet(
+                unsafe { *cue_info }.CueSheetName
+            )
+        };
+        if let Some(new_sheet) = new_sheet {
+            unsafe { (*cue_info).CueSheetName = new_sheet; }
+        }
+    }
+
+    let result = get_orig_fn!(PrepareSong, PrepareSongFn)(
+        this, part, cue_info, play_param, stop_type
+    );
+
+    result
+}
+
+// public CriAtomCueSheet AddCueSheetByCueName(String) { }
+//
+//
+type AddCueSheetByCueNameFn = extern "C" fn(this: *mut Il2CppObject,
+    cue_name: *mut Il2CppString) -> *mut Il2CppObject;
+extern "C" fn AddCueSheetByCueName(this: *mut Il2CppObject,
+    cue_name: *mut Il2CppString
+) -> *mut Il2CppObject {
+    let orig = get_orig_fn!(AddCueSheetByCueName, AddCueSheetByCueNameFn);
+    let name = cue_str(cue_name);
+    let result = orig(this, cue_name);
+
+    if let Some(target) = crate::core::voice_replace::rewrite_cue_sheet_name(&name) {
+        let ptr = target.to_il2cpp_string();
+        if !ptr.is_null() {
+            orig(this, ptr);
+        }
+    }
+
+    result
+}
+
+// public Boolean AddSongCueSheet(Int32, String[]) { }
+//
+//
+type AddSongCueSheetFn = extern "C" fn(this: *mut Il2CppObject, music_id: i32,
+    sheets: *mut Il2CppArray) -> bool;
+extern "C" fn AddSongCueSheet(this: *mut Il2CppObject, music_id: i32,
+    sheets: *mut Il2CppArray
+) -> bool {
+    let orig = get_orig_fn!(AddSongCueSheet, AddSongCueSheetFn);
+    let names: Vec<String> = if sheets.is_null() {
+        Vec::new()
+    } else {
+        unsafe { Array::<*mut Il2CppString>::from(sheets).as_slice() }
+            .iter()
+            .map(|item| cue_str(*item))
+            .collect()
+    };
+
+    let (replaced, changed) = replaced_song_sheets(&names);
+    if changed == 0 {
+        return orig(this, music_id, sheets);
+    }
+
+    let Ok(mscorlib) = get_assembly_image(c"mscorlib.dll") else { return orig(this, music_id, sheets) };
+    let Ok(string_class) = get_class(mscorlib, c"System", c"String") else {
+        return orig(this, music_id, sheets);
+    };
+
+    let array = Array::<*mut Il2CppString>::new(string_class, replaced.len());
+    if array.this.is_null() {
+        return orig(this, music_id, sheets);
+    }
+
+    unsafe {
+        let slice = array.as_slice();
+        for (i, name) in replaced.iter().enumerate() {
+            slice[i] = name.to_il2cpp_string();
+        }
+    }
+
+    let ok = orig(this, music_id, array.this);
+
+    ok
+}
+
+///
+fn replaced_song_sheets(names: &[String]) -> (Vec<String>, usize) {
+    let config = Hachimi::instance().config.load();
+    let char_replace = &config.replace_global_char;
+    if !char_replace.enable {
+        return (names.to_vec(), 0);
+    }
+
+    let force = char_replace.song_force_chara;
+    let mut replaced = Vec::with_capacity(names.len());
+    let mut changed = 0;
+
+    for name in names {
+        let target = if force != 0 {
+            match crate::core::voice_replace::chara_id_in(name) {
+                Some((chara_id, range)) if chara_id != force => {
+                    let mut new_name = name.clone();
+                    new_name.replace_range(range, &format!("{:04}", force));
+                    Some(new_name)
+                }
+                _ => None,
+            }
+        } else {
+            crate::core::voice_replace::rewrite_cue_sheet_name(name)
+        };
+
+        match target {
+            Some(target) => {
+                replaced.push(target);
+                changed += 1;
+            }
+            None => replaced.push(name.clone()),
+        }
+    }
+
+    (replaced, changed)
+}
+
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, AudioManager);
 
     let play_internal_addr = get_method_addr(AudioManager, c"PlayInternal", 4);
     new_hook!(play_internal_addr, PlayInternal);
 
+    let prepare_song_addr = get_method_addr(AudioManager, c"_prepareSong", 4);
+    if prepare_song_addr != 0 {
+        new_hook!(prepare_song_addr, PrepareSong);
+    }
+
+    let add_song_sheet_addr = get_method_addr(AudioManager, c"AddSongCueSheet", 2);
+    if add_song_sheet_addr != 0 {
+        new_hook!(add_song_sheet_addr, AddSongCueSheet);
+    }
+
+    let add_cue_by_name_addr = get_method_addr(AudioManager, c"AddCueSheetByCueName", 1);
+    unsafe { ADD_CUE_BY_NAME_ADDR = add_cue_by_name_addr; }
+    if add_cue_by_name_addr != 0 {
+        new_hook!(add_cue_by_name_addr, AddCueSheetByCueName);
+    }
+
     unsafe {
         CLASS = AudioManager;
         GET_CRIAUDIOMANAGER_ADDR = get_method_addr(AudioManager, c"get_CriAudioManager", 0);
         GET_CUE_LENGTH_ADDR = get_method_addr(AudioManager, c"GetCueLength", 2);
+        IS_AVAILABLE_CUE_SHEET_ADDR = get_method_addr(AudioManager, c"IsAvailableCueSheet", 1);
         PLAY_BGM_FROM_NAME_ADDR = get_method_addr(AudioManager, c"PlayBgmFromName", 8);
         GET_VOLUME_ADDR = get_method_addr(AudioManager, c"GetVolume", 1);
 
@@ -255,5 +465,60 @@ pub fn init(umamusume: *const Il2CppImage) {
         _SONGCHARAPLAYBACKS_FIELD = get_field_from_name(AudioManager, c"_songCharaPlaybacks");
         _BGMPLAYBACK_FIELD = get_field_from_name(AudioManager, c"_bgmPlayback");
         _ATOMSOURCEARRAYBGM_FIELD = get_field_from_name(AudioManager, c"_atomSourceArrayBGM");
+
+        if Hachimi::instance().config.load().debug_mode {
+            let mut iter: *mut std::ffi::c_void = std::ptr::null_mut();
+            let mut names: Vec<String> = Vec::new();
+            let mut song_apis: Vec<String> = Vec::new();
+
+            loop {
+                let method = crate::il2cpp::api::il2cpp_class_get_methods(AudioManager, &mut iter);
+                if method.is_null() { break; }
+                if (*method).is_generic() != 0 { continue; }
+
+                let name = std::ffi::CStr::from_ptr((*method).name)
+                    .to_string_lossy()
+                    .to_string();
+
+                if name.contains("Song") || name.contains("CueSheet")
+                    || name == "PrepareCharaPlaybacks" {
+                    let type_name = |ty: *const crate::il2cpp::types::Il2CppType| -> String {
+                        if ty.is_null() {
+                            "?".to_string()
+                        } else {
+                            let p = crate::il2cpp::api::il2cpp_type_get_name(ty);
+                            if p.is_null() {
+                                "?".to_string()
+                            } else {
+                                std::ffi::CStr::from_ptr(p).to_string_lossy().to_string()
+                            }
+                        }
+                    };
+
+                    let count = crate::il2cpp::api::il2cpp_method_get_param_count(method);
+                    let mut params = Vec::new();
+                    for i in 0..count {
+                        params.push(type_name(
+                            crate::il2cpp::api::il2cpp_method_get_param(method, i)
+                        ));
+                    }
+                    let ret = type_name(
+                        crate::il2cpp::api::il2cpp_method_get_return_type(method)
+                    );
+                    song_apis.push(format!(
+                        "{}({}) -> {}", name, params.join(", "), ret
+                    ));
+                }
+
+                names.push(name);
+            }
+
+            names.sort();
+            song_apis.sort();
+            debug!("[am] AudioManager methods ({}): {}", names.len(), names.join(", "));
+            for api in song_apis {
+                debug!("[am] song api: {}", api);
+            }
+        }
     }
 }

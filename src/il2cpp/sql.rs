@@ -916,11 +916,24 @@ impl SelectQueryState for CharacterSystemTextQuery {
 
         if let Some(character_id) = self.character_id.int_value {
             if let Some(voice_id) = self.voice_id.value_or_try_get_int(query) {
-                return Hachimi::instance().localized_data.load()
+                let effective_id = crate::core::voice_replace::effective_char_id(character_id);
+
+                let localized = Hachimi::instance().localized_data.load();
+                if let Some(translated) = localized
                     .character_system_text_dict
-                    .get(&character_id)
-                    .map(|c| c.get(&voice_id).map(|s| s.to_il2cpp_string()))
-                    .unwrap_or_default()
+                    .get(&effective_id)
+                    .and_then(|c| c.get(&voice_id))
+                {
+                    return Some(translated.to_il2cpp_string());
+                }
+
+                if effective_id != character_id {
+                    if let Some(text) = crate::core::voice_replace::text_for(effective_id, voice_id) {
+                        return Some(text);
+                    }
+                }
+
+                return None;
             }
         }
 
@@ -1001,7 +1014,6 @@ impl SelectQueryState for RaceJikkyoMessageQuery {
         None
     }
 }
-
 
 // sqlparser extensions
 pub trait SelectExt {
@@ -1185,12 +1197,248 @@ fn get_single_column_int(sql: &str) -> Vec<i32> {
     items
 }
 
+/// 查 chara_type 表：角色在某个场景/切分下的动作 type 号。
+/// 动作资源按 type 分包（3d/motion/{用途}/body/type{NN}），目标角色缺原角色
+/// 那几档 type 时装配会卡住，所以替换后要按目标角色自己的 type 走。
+pub fn get_chara_motion_type(chara_id: i32, scene: i32, cut: i32) -> Option<i32> {
+    let sql = format!(
+        "SELECT value FROM chara_type WHERE chara_id={} AND target_scene={} AND target_cut={} LIMIT 1",
+        chara_id, scene, cut
+    );
+    get_single_column_int(&sql).first().copied()
+}
+
 pub fn get_all_chara_ids() -> Vec<i32> {
     get_single_column_int("SELECT id FROM chara_data")
 }
 
 pub fn get_all_dress_ids() -> Vec<i32> {
     get_single_column_int("SELECT id FROM dress_data")
+}
+
+/// Per-dress data needed for global character replacement:
+/// the head model id and whether the dress has a mini character model.
+#[derive(Clone, Copy, Default)]
+pub struct DressInfo {
+    pub head_sub_id: i32,
+    pub have_mini: bool,
+    pub body_type: i32,
+    pub general_purpose: bool,
+    /// Which character the dress belongs to. Universal dresses (the gym
+    /// uniform, school uniform and friends) carry 0 and suit anyone.
+    pub chara_id: i32
+}
+
+static DRESS_INFO_CACHE: Lazy<RwLock<Option<FnvHashMap<i32, DressInfo>>>> = Lazy::new(|| RwLock::new(None));
+
+fn load_dress_info() -> FnvHashMap<i32, DressInfo> {
+    let mut items = FnvHashMap::default();
+    let db_path = get_masterdb_path();
+    let conn = Connection::new();
+
+    if Connection::Open(conn, db_path.to_il2cpp_string(), ptr::null_mut(), ptr::null_mut(), 0) {
+        let query = Connection::Query(conn, "SELECT id, head_sub_id, have_mini, chara_id, body_type, general_purpose FROM dress_data".to_il2cpp_string());
+        if !query.is_null() {
+            while Query::Step(query) {
+                items.insert(Query::GetInt(query, 0), DressInfo {
+                    head_sub_id: Query::GetInt(query, 1),
+                    have_mini: Query::GetInt(query, 2) != 0,
+                    chara_id: Query::GetInt(query, 3),
+                    body_type: Query::GetInt(query, 4),
+                    general_purpose: Query::GetInt(query, 5) != 0
+                });
+            }
+            Query::Dispose(query);
+        }
+        Connection::CloseDB(conn);
+    }
+
+    items
+}
+
+static DRESS_INFO_READY: AtomicBool = AtomicBool::new(false);
+
+/// Whether the dress table has been loaded.
+///
+/// The load must not happen on first use from inside a game callback: opening
+/// SQLite while the game is walking its own objects deadlocks (same failure
+/// mode as the caption cache).
+pub fn is_dress_info_ready() -> bool {
+    DRESS_INFO_READY.load(Ordering::Acquire)
+}
+
+/// Loads the dress table ahead of time, from the main thread and outside any
+/// game callback. Returns false when the master database is not up yet, in
+/// which case the caller should try again later.
+pub fn preload_dress_info() -> bool {
+    let items = load_dress_info();
+    if items.is_empty() {
+        return false;
+    }
+    *DRESS_INFO_CACHE.write().unwrap() = Some(items);
+    DRESS_INFO_READY.store(true, Ordering::Release);
+    true
+}
+
+/// Looks up `dress_data` for the given dress id, loading and caching the whole
+/// table on first use.
+pub fn get_dress_info(dress_id: i32) -> Option<DressInfo> {
+    {
+        let cache = DRESS_INFO_CACHE.read().unwrap();
+        if let Some(items) = cache.as_ref() {
+            return items.get(&dress_id).copied();
+        }
+    }
+
+    let items = load_dress_info();
+    let info = items.get(&dress_id).copied();
+    let loaded = !items.is_empty();
+    *DRESS_INFO_CACHE.write().unwrap() = Some(items);
+    if loaded {
+        DRESS_INFO_READY.store(true, Ordering::Release);
+    }
+    info
+}
+
+pub fn get_head_id_from_dress_id(dress_id: i32) -> i32 {
+    get_dress_info(dress_id).map(|info| info.head_sub_id).unwrap_or(0)
+}
+
+/// Which character a dress belongs to; 0 for the universal ones.
+pub fn is_general_purpose_dress(dress_id: i32) -> bool {
+    DRESS_INFO_CACHE.read().unwrap().as_ref()
+        .and_then(|m| m.get(&dress_id))
+        .map(|d| d.general_purpose)
+        .unwrap_or(false)
+}
+
+pub fn get_body_type_from_dress_id(dress_id: i32) -> i32 {
+    DRESS_INFO_CACHE.read().unwrap().as_ref()
+        .and_then(|m| m.get(&dress_id))
+        .map(|d| d.body_type)
+        .unwrap_or(0)
+}
+
+pub fn get_default_body_type(chara_id: i32) -> i32 {
+    get_body_type_from_dress_id(chara_id * 100 + 1)
+}
+
+pub fn get_dress_chara_id(dress_id: i32) -> i32 {
+    get_dress_info(dress_id).map(|info| info.chara_id).unwrap_or(0)
+}
+
+pub fn get_dress_have_mini(dress_id: i32) -> bool {
+    get_dress_info(dress_id).map(|info| info.have_mini).unwrap_or(false)
+}
+
+
+static CHARA_LAST_YEAR_CACHE: Lazy<RwLock<Option<FnvHashMap<i32, i32>>>> = Lazy::new(|| RwLock::new(None));
+static CHARA_LAST_YEAR_READY: AtomicBool = AtomicBool::new(false);
+
+fn load_chara_last_year() -> FnvHashMap<i32, i32> {
+    let mut items = FnvHashMap::default();
+    let db_path = get_masterdb_path();
+    let conn = Connection::new();
+
+    if Connection::Open(conn, db_path.to_il2cpp_string(), ptr::null_mut(), ptr::null_mut(), 0) {
+        let query = Connection::Query(conn, "SELECT id, last_year FROM chara_data".to_il2cpp_string());
+        if !query.is_null() {
+            while Query::Step(query) {
+                items.insert(Query::GetInt(query, 0), Query::GetInt(query, 1));
+            }
+            Query::Dispose(query);
+        }
+        Connection::CloseDB(conn);
+    }
+
+    items
+}
+
+pub fn is_chara_data_ready() -> bool {
+    CHARA_LAST_YEAR_READY.load(Ordering::Acquire)
+}
+
+pub fn preload_chara_data() -> bool {
+    let items = load_chara_last_year();
+    if items.is_empty() {
+        return false;
+    }
+    *CHARA_LAST_YEAR_CACHE.write().unwrap() = Some(items);
+    CHARA_LAST_YEAR_READY.store(true, Ordering::Release);
+    true
+}
+
+pub fn is_playable_chara(chara_id: i32) -> bool {
+    let cache = CHARA_LAST_YEAR_CACHE.read().unwrap();
+    match cache.as_ref() {
+        Some(items) => items.get(&chara_id).map(|last_year| *last_year != 1800).unwrap_or(false),
+        None => false,
+    }
+}
+
+pub fn get_dress_sort_rows() -> Vec<(i32, i32, i32, i32)> {
+    let mut items = Vec::new();
+    let db_path = get_masterdb_path();
+    let conn = Connection::new();
+
+    if Connection::Open(conn, db_path.to_il2cpp_string(), ptr::null_mut(), ptr::null_mut(), 0) {
+        let query = Connection::Query(conn, "SELECT id, chara_id, disp_order, use_live_theater FROM dress_data".to_il2cpp_string());
+        if !query.is_null() {
+            while Query::Step(query) {
+                items.push((Query::GetInt(query, 0), Query::GetInt(query, 1), Query::GetInt(query, 2), Query::GetInt(query, 3)));
+            }
+            Query::Dispose(query);
+        }
+        Connection::CloseDB(conn);
+    }
+
+    items
+}
+
+pub fn get_card_rows() -> Vec<(i32, i32)> {
+    let mut items = Vec::new();
+    let db_path = get_masterdb_path();
+    let conn = Connection::new();
+
+    if Connection::Open(conn, db_path.to_il2cpp_string(), ptr::null_mut(), ptr::null_mut(), 0) {
+        let query = Connection::Query(conn, "SELECT id, chara_id FROM card_data".to_il2cpp_string());
+        if !query.is_null() {
+            while Query::Step(query) {
+                items.push((Query::GetInt(query, 0), Query::GetInt(query, 1)));
+            }
+            Query::Dispose(query);
+        }
+        Connection::CloseDB(conn);
+    }
+
+    items
+}
+
+/// Every dress in master.mdb as `(dress id, chara id, dress name)`, the name
+/// coming from text_data category 14 and left empty when there is none.
+pub fn get_all_dress_entries() -> Vec<(i32, i32, String)> {
+    let mut items = Vec::new();
+    let db_path = get_masterdb_path();
+    let conn = Connection::new();
+
+    if Connection::Open(conn, db_path.to_il2cpp_string(), ptr::null_mut(), ptr::null_mut(), 0) {
+        let sql = "SELECT D.id, D.chara_id, T.text FROM dress_data AS D \
+                   LEFT JOIN text_data AS T ON T.\"index\" = D.id AND T.id = 14";
+        let query = Connection::Query(conn, sql.to_il2cpp_string());
+        if !query.is_null() {
+            while Query::Step(query) {
+                let name_ptr = Query::GetText(query, 2);
+                let name = unsafe { name_ptr.as_ref() }
+                    .map(|s| s.as_utf16str().to_string())
+                    .unwrap_or_default();
+                items.push((Query::GetInt(query, 0), Query::GetInt(query, 1), name));
+            }
+            Query::Dispose(query);
+        }
+        Connection::CloseDB(conn);
+    }
+
+    items
 }
 
 pub fn get_all_music_ids() -> Vec<i32> {

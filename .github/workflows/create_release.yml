@@ -1,11 +1,18 @@
 name: Create Release
 
-on: workflow_dispatch
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（手动触发时用，需与 Cargo.toml 的 version 一致）"
+        required: true
 
 permissions:
   contents: write
   id-token: write
-  attestations: write
 
 jobs:
   build:
@@ -58,14 +65,6 @@ jobs:
           RELEASE=1 ./tools/android/build.sh
         env:
           HACHIMI_IGNORE_DIRTY: "true"
-
-      - name: Attest Android
-        if: matrix.target == 'aarch64-linux-android'
-        uses: actions/attest@v4
-        with:
-          subject-path: |
-            build/*.so
-            build/sha256.json
 
 ############### WINDOWS ##################
 
@@ -153,15 +152,6 @@ jobs:
           }
           EOF
 
-      - name: Attest Windows
-        if: matrix.target == 'x86_64-pc-windows-msvc'
-        uses: actions/attest@v4
-        with:
-          subject-path: |
-            build/blake3.json
-            build/hachimi.dll
-            build/hachimi_installer.exe
-
 ############### ARTIFACTS ##################
 
       - name: Upload Android binaries
@@ -196,6 +186,23 @@ jobs:
         run: |
           VERSION=$(awk '/^\[package\]/{flag=1} flag && /^version/{print $3; exit}' Cargo.toml | tr -d '"')
           echo "RELEASE_VERSION=v$VERSION" >> $GITHUB_ENV
+
+      - name: Check tag matches version
+        shell: bash
+        run: |
+          EXPECTED="$RELEASE_VERSION"
+          TAG="${{ github.event.inputs.version || github.ref_name }}"
+          case "$TAG" in
+            "$EXPECTED"|"$EXPECTED"-*|"$EXPECTED".*)
+              echo "版本一致：$TAG（基准 $EXPECTED）"
+              ;;
+            *)
+              echo "::error::标签 ($TAG) 与 Cargo.toml 的版本 ($EXPECTED) 不一致"
+              exit 1
+              ;;
+          esac
+        env:
+          RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v8
@@ -245,7 +252,7 @@ jobs:
           unset IFS
         env:
           GH_TOKEN: ${{ github.token }}
-          LATEST_TAG: ${{ env.RELEASE_VERSION }}
+          LATEST_TAG: ${{ github.event.inputs.version || github.ref_name }}
 
       - name: Upload binaries to a release
         uses: softprops/action-gh-release@v3
@@ -254,4 +261,4 @@ jobs:
           files: |
             artifacts/android/*
             artifacts/windows/*
-          tag_name: ${{ env.RELEASE_VERSION }}
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}

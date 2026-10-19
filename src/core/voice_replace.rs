@@ -1,0 +1,388 @@
+
+use std::ffi::c_void;
+use std::ops::Range;
+use std::ptr;
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
+use std::sync::RwLock;
+
+use fnv::{FnvHashMap, FnvHashSet};
+use once_cell::sync::Lazy;
+use crate::core::{Hachimi, utils::get_masterdb_path};
+use crate::il2cpp::ext::{Il2CppStringExt, StringExt};
+use crate::il2cpp::hook::LibNative_Runtime::Sqlite3::{Connection, Query};
+use crate::il2cpp::symbols::Thread;
+use crate::il2cpp::types::Il2CppString;
+
+const CHARA_ID_MIN: i32 = 1000;
+const CHARA_ID_MAX: i32 = 1999;
+
+static LAST_CUE_SHEET: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
+
+static CUE_AVAILABLE: Lazy<RwLock<FnvHashMap<String, bool>>> =
+    Lazy::new(|| RwLock::new(FnvHashMap::default()));
+
+fn cue_available(sheet: &str) -> bool {
+    if let Some(hit) = CUE_AVAILABLE.read().unwrap().get(sheet) {
+        return *hit;
+    }
+    let available = crate::il2cpp::hook::umamusume::AudioManager::cue_sheet_available(sheet);
+    CUE_AVAILABLE.write().unwrap().insert(sheet.to_string(), available);
+    available
+}
+
+fn resolve_target_sheet(sheet: &str, range: Range<usize>, new_chara: i32) -> Option<String> {
+    let same = {
+        let mut s = sheet.to_string();
+        s.replace_range(range.clone(), &format!("{:04}", new_chara));
+        s
+    };
+
+    if !sheet.contains("/snd_bgm_live_") {
+        return Some(same);
+    }
+
+    if cue_available(&same) {
+        return Some(same);
+    }
+
+    use crate::il2cpp::hook::umamusume::AudioManager;
+    if AudioManager::load_cue_sheet(&same) && cue_available(&same) {
+        debug!("[voice] {sheet} 补加载了替换目标 {same}");
+        return Some(same);
+    }
+
+    let tail = sheet.get(range.end..)?;
+    let variant = tail.strip_prefix('_')?;
+    if variant.len() != 2 || !variant.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+
+    let head = same.get(..same.len() - tail.len())?;
+    for v in 1..=9u32 {
+        let candidate = format!("{head}_{v:02}");
+        if candidate == same {
+            continue;
+        }
+        if cue_available(&candidate) {
+            debug!("[voice] {sheet} 的目标变体 {same} 不存在，退用 {candidate}");
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+fn fallback_variant_if_unavailable(sheet: &str) -> Option<String> {
+    if !sheet.starts_with("snd_voi_") {
+        return None;
+    }
+    let at = sheet.rfind('_')?;
+    let seg = sheet.get(at + 1..)?;
+    if seg.len() != 6 || !seg.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let variant = &seg[4..6];
+    let available = match known_sheet(sheet) {
+        Some(found) => found,
+        None => cue_available(sheet),
+    };
+    if available {
+        return None;
+    }
+
+    let head = &sheet[..sheet.len() - 2];
+    let mut order: Vec<String> = vec!["01".to_string(), "00".to_string()];
+    for v in 2..=9u32 {
+        order.push(format!("{:02}", v));
+    }
+    for v in order {
+        if v == variant {
+            continue;
+        }
+        let candidate = format!("{}{}", head, v);
+        let cand_ok = match known_sheet(&candidate) {
+            Some(found) => found,
+            None => cue_available(&candidate),
+        };
+        if cand_ok {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+pub fn rewrite_cue_sheet(cue_sheet: *mut Il2CppString) -> Option<*mut Il2CppString> {
+    if cue_sheet.is_null() {
+        return None;
+    }
+
+    let sheet = unsafe { &*cue_sheet }.as_utf16str().to_string();
+
+    if let Some(fallback) = fallback_variant_if_unavailable(&sheet) {
+        let new_ptr = fallback.to_il2cpp_string();
+        if !new_ptr.is_null() {
+            debug!("[voice] {} -> {}（变体回退）", sheet, fallback);
+            return Some(new_ptr);
+        }
+    }
+
+    let (chara_id, range) = chara_id_in(&sheet)?;
+
+    let hachimi = Hachimi::instance();
+    let config = hachimi.config.load();
+    let char_replace = &config.replace_global_char;
+    if !char_replace.enable {
+        return None;
+    }
+
+    let entry = char_replace
+        .data
+        .iter()
+        .find(|entry| entry.orig_char_id == chara_id)?;
+    if entry.new_char_id == 0 || entry.new_char_id == chara_id {
+        return None;
+    }
+
+    let new_sheet = match resolve_target_sheet(&sheet, range, entry.new_char_id) {
+        Some(new_sheet) => new_sheet,
+        None => {
+            debug!("[voice] {sheet} 没有可用的替换目标，保留原音");
+            return None;
+        }
+    };
+
+    let new_sheet = match fallback_variant_if_unavailable(&new_sheet) {
+        Some(fallback) => {
+            debug!(
+                "[voice] {} 的替换结果 {} 不可用，回退 {}",
+                sheet, new_sheet, fallback
+            );
+            fallback
+        }
+        None => new_sheet,
+    };
+
+    let new_ptr = new_sheet.to_il2cpp_string();
+    if new_ptr.is_null() {
+        return None;
+    }
+
+    LAST_CUE_SHEET.store(new_ptr as *mut c_void, Ordering::SeqCst);
+    debug!("[voice] {} -> {}", sheet, new_sheet);
+    Some(new_ptr)
+}
+
+pub fn rewrite_cue_sheet_name(sheet: &str) -> Option<String> {
+    let (chara_id, range) = chara_id_in(sheet)?;
+
+    let config = Hachimi::instance().config.load();
+    let char_replace = &config.replace_global_char;
+    if !char_replace.enable {
+        return None;
+    }
+
+    let entry = char_replace
+        .data
+        .iter()
+        .find(|entry| entry.orig_char_id == chara_id)?;
+    if entry.new_char_id == 0 || entry.new_char_id == chara_id {
+        return None;
+    }
+
+    let mut new_sheet = sheet.to_string();
+    new_sheet.replace_range(range, &format!("{:04}", entry.new_char_id));
+    Some(new_sheet)
+}
+
+pub fn rewrite_cue_sheet_to(cue_sheet: *mut Il2CppString, chara_id: i32) -> Option<*mut Il2CppString> {
+    if cue_sheet.is_null() {
+        return None;
+    }
+
+    let sheet = unsafe { &*cue_sheet }.as_utf16str().to_string();
+    let (orig_id, range) = chara_id_in(&sheet)?;
+    if orig_id == chara_id {
+        return None;
+    }
+
+    let mut new_sheet = sheet.clone();
+    new_sheet.replace_range(range, &format!("{:04}", chara_id));
+
+    let new_ptr = new_sheet.to_il2cpp_string();
+    if new_ptr.is_null() {
+        return None;
+    }
+
+    debug!("[voice] {sheet} -> {new_sheet}（强制）");
+    Some(new_ptr)
+}
+
+pub fn effective_char_id(chara_id: i32) -> i32 {
+    let hachimi = Hachimi::instance();
+    let config = hachimi.config.load();
+    let char_replace = &config.replace_global_char;
+    if !char_replace.enable {
+        return chara_id;
+    }
+
+    char_replace
+        .data
+        .iter()
+        .find(|entry| entry.orig_char_id == chara_id && entry.new_char_id != 0)
+        .map(|entry| entry.new_char_id)
+        .unwrap_or(chara_id)
+}
+
+static SYSTEM_TEXT: Lazy<RwLock<FnvHashMap<(i32, i32), String>>> =
+    Lazy::new(|| RwLock::new(FnvHashMap::default()));
+static SYSTEM_TEXT_LOADING: AtomicBool = AtomicBool::new(false);
+static SYSTEM_TEXT_READY: AtomicBool = AtomicBool::new(false);
+
+static KNOWN_SHEETS: Lazy<RwLock<FnvHashSet<String>>> =
+    Lazy::new(|| RwLock::new(FnvHashSet::default()));
+
+fn known_sheet(sheet: &str) -> Option<bool> {
+    let set = KNOWN_SHEETS.read().unwrap();
+    if set.is_empty() {
+        return None;
+    }
+    Some(set.contains(sheet))
+}
+
+pub fn load_system_text() {
+    let mut map = FnvHashMap::default();
+    let mut sheets = FnvHashSet::default();
+    let db_path = get_masterdb_path();
+    let conn = Connection::new();
+
+    if Connection::Open(conn, db_path.to_il2cpp_string(), ptr::null_mut(), ptr::null_mut(), 0) {
+        let sql = "SELECT character_id, voice_id, text, cue_sheet FROM character_system_text";
+        let query = Connection::Query(conn, sql.to_il2cpp_string());
+        if !query.is_null() {
+            while Query::Step(query) {
+                let text_ptr = Query::GetText(query, 2);
+                let text = unsafe { text_ptr.as_ref() }
+                    .map(|s| s.as_utf16str().to_string())
+                    .unwrap_or_default();
+                map.insert((Query::GetInt(query, 0), Query::GetInt(query, 1)), text);
+
+                let sheet_ptr = Query::GetText(query, 3);
+                if let Some(sheet) = unsafe { sheet_ptr.as_ref() } {
+                    sheets.insert(sheet.as_utf16str().to_string());
+                }
+            }
+            Query::Dispose(query);
+        }
+        Connection::CloseDB(conn);
+    }
+
+    if map.is_empty() {
+        warn!("[voice] character_system_text 为空，稍后再试");
+    } else {
+        debug!("[voice] 已缓存 {} 条台词文本 / {} 个 cue sheet", map.len(), sheets.len());
+        *SYSTEM_TEXT.write().unwrap() = map;
+        *KNOWN_SHEETS.write().unwrap() = sheets;
+        SYSTEM_TEXT_READY.store(true, Ordering::Release);
+    }
+
+    SYSTEM_TEXT_LOADING.store(false, Ordering::Release);
+}
+
+pub fn text_for(chara_id: i32, voice_id: i32) -> Option<*mut Il2CppString> {
+    if let Some(text) = SYSTEM_TEXT.read().unwrap().get(&(chara_id, voice_id)) {
+        return Some(text.to_il2cpp_string());
+    }
+
+    if !SYSTEM_TEXT_READY.load(Ordering::Acquire)
+        && !SYSTEM_TEXT_LOADING.swap(true, Ordering::AcqRel)
+    {
+        Thread::main_thread().schedule(load_system_text);
+    }
+
+    None
+}
+
+pub fn chara_id_in(sheet: &str) -> Option<(i32, Range<usize>)> {
+    if let Some(at) = sheet.rfind("_chara_") {
+        let start = at + "_chara_".len();
+        if let Some(head) = sheet.get(start..start + 4) {
+            if let Ok(chara_id) = head.parse::<i32>() {
+                if (CHARA_ID_MIN..=CHARA_ID_MAX).contains(&chara_id) {
+                    return Some((chara_id, start..start + 4));
+                }
+            }
+        }
+    }
+
+    if let Some(at) = sheet.rfind("_vo_") {
+        let start = at + "_vo_".len();
+        if let Some(head) = sheet.get(start..start + 4) {
+            if let Ok(chara_id) = head.parse::<i32>() {
+                if (CHARA_ID_MIN..=CHARA_ID_MAX).contains(&chara_id) {
+                    return Some((chara_id, start..start + 4));
+                }
+            }
+        }
+    }
+
+    let start = sheet.rfind('_').map(|index| index + 1).unwrap_or(0);
+    let segment = &sheet[start..];
+    if segment.len() < 4 {
+        return None;
+    }
+
+    let head = &segment[..4];
+    if !head.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    let chara_id: i32 = head.parse().ok()?;
+    if !(CHARA_ID_MIN..=CHARA_ID_MAX).contains(&chara_id) {
+        return None;
+    }
+
+    Some((chara_id, start..start + 4))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(sheet: &str) -> Option<i32> {
+        chara_id_in(sheet).map(|(id, _)| id)
+    }
+
+    #[test]
+    fn reads_character_ids_from_real_cue_names() {
+        assert_eq!(parse("snd_voi_training_110301"), Some(1103));
+        assert_eq!(parse("snd_voi_training_110300"), Some(1103));
+        assert_eq!(parse("snd_voi_live_111400"), Some(1114));
+        assert_eq!(parse("snd_voi_home_111401"), Some(1114));
+        assert_eq!(parse("snd_voi_outgame_102901"), Some(1029));
+        assert_eq!(parse("snd_voi_title_1053"), Some(1053));
+        assert_eq!(parse("snd_voi_tc_1053"), Some(1053));
+
+        assert_eq!(parse("1157/snd_bgm_live_1157_chara_1003_01"), Some(1003));
+        assert_eq!(parse("1157/snd_bgm_live_1157_chara_1022_01"), Some(1022));
+        assert_eq!(parse("1157/snd_bgm_live_1157_vo_1006_02"), Some(1006));
+        assert_eq!(parse("1157/snd_bgm_live_1157_oke_01"), None);
+        assert_eq!(parse("1157/snd_bgm_live_1157_preview_02"), None);
+    }
+
+    #[test]
+    fn ignores_names_without_a_character_id() {
+        assert_eq!(parse("snd_sfx_common"), None);
+        assert_eq!(parse("snd_voi_abc_123"), None);
+        assert_eq!(parse("snd_voi_xyz_9999"), None);
+        assert_eq!(parse("snd_voi_"), None);
+        assert_eq!(parse(""), None);
+    }
+
+    #[test]
+    fn only_the_id_is_replaced() {
+        let (id, range) = chara_id_in("snd_voi_live_111400").unwrap();
+        assert_eq!(id, 1114);
+        let mut out = "snd_voi_live_111400".to_owned();
+        out.replace_range(range, "1030");
+        assert_eq!(out, "snd_voi_live_103000");
+    }
+}

@@ -173,6 +173,7 @@ pub struct Gui {
 
     live_slider_text: String,
     race_slider_text: String,
+    cutin_slider_text: String,
     update_progress_text: String,
 
     notifications: Vec<Notification>,
@@ -189,6 +190,7 @@ pub static WANTS_INPUT: AtomicBool = AtomicBool::new(false);
 pub static EGUI_TYPING: AtomicBool = AtomicBool::new(false);
 pub static IS_LIVE_SCENE: AtomicBool = AtomicBool::new(false);
 pub static IS_LIVE_SLIDER_ACTIVE: AtomicBool = AtomicBool::new(false);
+pub static IS_CUTIN_SLIDER_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 static RACE_SLIDER_DRAGGING: AtomicBool = AtomicBool::new(false);
 
@@ -264,13 +266,14 @@ impl ShortcutOption {
         match self {
             ShortcutOption::ThemeEditor => t!("theme_editor.title"),
             ShortcutOption::FreeCamera => t!("free_camera.settings_title"),
-            ShortcutOption::LiveVocalsSwap => t!("config_editor.live_vocals_swap")
+            ShortcutOption::LiveVocalsSwap => t!("config_editor.live_vocals_swap"),
+            ShortcutOption::FreeCameraToggle => t!("free_camera.toggle_shortcut_label")
         }
     }
 
     #[cfg(target_os = "android")]
     pub fn is_available(self) -> bool {
-        self != ShortcutOption::FreeCamera
+        !matches!(self, ShortcutOption::FreeCamera | ShortcutOption::FreeCameraToggle)
     }
 
     #[cfg(target_os = "windows")]
@@ -309,6 +312,18 @@ fn toggle_shortcut_window(option: ShortcutOption) {
             ShortcutOption::FreeCamera => {
                 gui.show_window(Box::new(FreeCameraSettingsWindow::new()));
             },
+            #[cfg(target_os = "windows")]
+            ShortcutOption::FreeCameraToggle => {
+                let hachimi = Hachimi::instance();
+                let mut config = hachimi.config.load().as_ref().clone();
+                config.windows.free_camera.enabled = !config.windows.free_camera.enabled;
+                let enabled = config.windows.free_camera.enabled;
+                let _ = hachimi.config.store(std::sync::Arc::new(config));
+                crate::windows::free_camera::reload_runtime_config();
+                warn!("[free_camera] toggled by shortcut: enabled={}", enabled);
+            },
+            #[cfg(target_os = "android")]
+            ShortcutOption::FreeCameraToggle => {},
             #[cfg(target_os = "android")]
             ShortcutOption::FreeCamera => {},
             ShortcutOption::LiveVocalsSwap => {
@@ -3002,6 +3017,7 @@ impl Gui {
 
             live_slider_text: String::new(),
             race_slider_text: String::new(),
+            cutin_slider_text: String::new(),
             update_progress_text: String::new(),
 
             notifications: Vec::new(),
@@ -3275,6 +3291,73 @@ impl Gui {
         }
 
         true
+    }
+
+    fn run_cutin_slider(&mut self, ctx: &egui::Context) {
+        use crate::il2cpp::hook::umamusume::MovieProbe;
+
+        IS_CUTIN_SLIDER_ACTIVE.store(false, atomic::Ordering::Release);
+
+        if !Hachimi::instance().config.load().cutin_progress_slider {
+            return;
+        }
+        if !MovieProbe::cutin_active() {
+            return;
+        }
+
+        let current = MovieProbe::cutin_current_time();
+        let total = MovieProbe::cutin_total_time();
+        if total <= 0.01 {
+            return;
+        }
+
+        IS_CUTIN_SLIDER_ACTIVE.store(true, atomic::Ordering::Release);
+
+        let scale = get_scale(ctx);
+        let mut cur = current.clamp(0.0, total);
+        egui::Area::new(egui::Id::new("cutin_slider_area"))
+            .anchor(egui::Align2::RIGHT_BOTTOM, egui::vec2(-20.0 * scale, -40.0 * scale))
+            .show(ctx, |ui| {
+                egui::Frame::window(&ctx.style())
+                    .fill(egui::Color32::from_black_alpha(150))
+                    .inner_margin(egui::Margin::symmetric((16.0 * scale) as i8, (8.0 * scale) as i8))
+                    .corner_radius(10.0 * scale)
+                    .show(ui, |ui| {
+                        ui.set_width(ctx.content_rect().width() * 0.42);
+                        ui.horizontal(|ui| {
+                            let paused = MovieProbe::cutin_is_paused();
+                            if ui.button(if paused { "▶" } else { "⏸" }).clicked() {
+                                if paused {
+                                    MovieProbe::cutin_play();
+                                }
+                                else {
+                                    MovieProbe::cutin_pause();
+                                }
+                            }
+                            let curr_m = (cur / 60.0).floor() as i32;
+                            let curr_s = (cur % 60.0).floor() as i32;
+                            let tot_m = (total / 60.0).floor() as i32;
+                            let tot_s = (total % 60.0).floor() as i32;
+                            self.cutin_slider_text.clear();
+                            let _ = write!(self.cutin_slider_text, "{:02}:{:02} / {:02}:{:02}", curr_m, curr_s, tot_m, tot_s);
+                            ui.label(&self.cutin_slider_text);
+
+                            let available_w = ui.available_width();
+                            ui.scope(|ui| {
+                                ui.spacing_mut().slider_width = available_w - (16.0 * scale);
+                                let res = ui.add(
+                                    egui::Slider::new(&mut cur, 0.0..=total)
+                                        .show_value(false)
+                                        .trailing_fill(true)
+                                );
+                                if res.changed() {
+                                    // 拖动只定位，播放/暂停由左侧按钮手动控制
+                                    MovieProbe::cutin_seek(cur);
+                                }
+                            });
+                        });
+                    });
+            });
     }
 
     fn run_race_slider(&mut self, ctx: &egui::Context) {
@@ -3601,6 +3684,7 @@ impl Gui {
         let ctx = self.context.clone();
         self.run_live_slider(&ctx);
         self.run_race_slider(&ctx);
+        self.run_cutin_slider(&ctx);
         Self::run_race_playback_button(&ctx);
         RaceStatHud::run(&ctx);
 
@@ -3761,6 +3845,15 @@ impl Gui {
                     }
                     ui.separator();
 
+                    if ui.button(t!("menu.return_to_lobby")).clicked() {
+                        crate::il2cpp::hook::umamusume::SceneManager::force_goto_home();
+                    }
+                    #[cfg(target_os = "windows")]
+                    if ui.button(t!("menu.force_goto_title")).clicked() {
+                        crate::il2cpp::hook::umamusume::ErrorSkip::force_goto_title();
+                    }
+                    ui.separator();
+
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         ui.heading(t!("menu.stats_heading"));
                         ui.label(&self.fps_text);
@@ -3790,6 +3883,13 @@ impl Gui {
                                 Thread::main_thread().schedule(|| {
                                     Application::set_targetFrameRate(30);
                                 });
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label(t!("menu.fov_label"));
+                            let mut v = crate::il2cpp::hook::umamusume::MovieProbe::fov_rt();
+                            if ui.add(egui::Slider::new(&mut v, 0.5..=3.0).step_by(0.05)).changed() {
+                                crate::il2cpp::hook::umamusume::MovieProbe::set_fov_rt(v);
                             }
                         });
                         #[cfg(target_os = "windows")]
@@ -4396,6 +4496,7 @@ impl Gui {
             !self.splash_visible && !self.menu_visible && !self.update_progress_visible &&
             self.notifications.is_empty() && self.windows.is_empty() &&
             !IS_LIVE_SCENE.load(atomic::Ordering::Acquire) &&
+                        !(Hachimi::instance().config.load().cutin_progress_slider && crate::il2cpp::hook::umamusume::MovieProbe::cutin_active()) &&
             !Self::race_slider_showing() &&
             !Self::race_playback_button_showing() &&
             !free_camera::has_overlay_message() &&
@@ -4408,6 +4509,7 @@ impl Gui {
             !self.splash_visible && !self.menu_visible && !self.update_progress_visible &&
             self.notifications.is_empty() && self.windows.is_empty() &&
             !IS_LIVE_SCENE.load(atomic::Ordering::Acquire) &&
+                        !(Hachimi::instance().config.load().cutin_progress_slider && crate::il2cpp::hook::umamusume::MovieProbe::cutin_active()) &&
             !Self::race_slider_showing() &&
             !Self::race_playback_button_showing() &&
             !RaceStatHud::elements_showing() && !RaceStatHud::is_active() &&
@@ -4417,6 +4519,7 @@ impl Gui {
 
     pub fn is_consuming_input(&self) -> bool {
         self.menu_visible || !self.windows.is_empty() || IS_LIVE_SLIDER_ACTIVE.load(atomic::Ordering::Acquire)
+            || IS_CUTIN_SLIDER_ACTIVE.load(atomic::Ordering::Acquire)
     }
 
     pub fn is_consuming_input_atomic() -> bool {
@@ -5107,6 +5210,9 @@ struct ConfigEditor {
     font_color_options: Arc<Vec<String>>,
     outline_size_options: Arc<Vec<String>>,
     outline_color_options: Arc<Vec<String>>,
+    char_replace_search: Mutex<String>,
+    chara_choices: Arc<Vec<(i32, String)>>,
+    dress_entries: Mutex<Option<Arc<Vec<(i32, i32, String)>>>>,
     hachifont_items: Arc<Vec<String>>,
     hachifont_signature: Vec<(String, u64, u64)>,
     hachifont_result: Option<Arc<Mutex<Option<HachifontScan>>>>,
@@ -5117,15 +5223,19 @@ struct ConfigEditor {
 enum ConfigEditorTab {
     General,
     Graphics,
-    Gameplay
+    Gameplay,
+    CharReplace,
+    Experimental
 }
 
 impl ConfigEditorTab {
-    fn display_list() -> [(ConfigEditorTab, Cow<'static, str>); 3] {
+    fn display_list() -> [(ConfigEditorTab, Cow<'static, str>); 5] {
         [
             (ConfigEditorTab::General, t!("config_editor.general_tab")),
             (ConfigEditorTab::Graphics, t!("config_editor.graphics_tab")),
-            (ConfigEditorTab::Gameplay, t!("config_editor.gameplay_tab"))
+            (ConfigEditorTab::Gameplay, t!("config_editor.gameplay_tab")),
+            (ConfigEditorTab::CharReplace, t!("config_editor.char_replace_tab")),
+            (ConfigEditorTab::Experimental, t!("config_editor.experimental_tab"))
         ]
     }
 
@@ -5133,15 +5243,19 @@ impl ConfigEditorTab {
         match self {
             ConfigEditorTab::General => ConfigEditorTab::Graphics,
             ConfigEditorTab::Graphics => ConfigEditorTab::Gameplay,
-            ConfigEditorTab::Gameplay => ConfigEditorTab::General,
+            ConfigEditorTab::Gameplay => ConfigEditorTab::CharReplace,
+            ConfigEditorTab::CharReplace => ConfigEditorTab::Experimental,
+            ConfigEditorTab::Experimental => ConfigEditorTab::General,
         }
     }
 
     fn prev(self) -> ConfigEditorTab {
         match self {
-            ConfigEditorTab::General => ConfigEditorTab::Gameplay,
+            ConfigEditorTab::General => ConfigEditorTab::CharReplace,
             ConfigEditorTab::Graphics => ConfigEditorTab::General,
             ConfigEditorTab::Gameplay => ConfigEditorTab::Graphics,
+            ConfigEditorTab::CharReplace => ConfigEditorTab::Gameplay,
+            ConfigEditorTab::Experimental => ConfigEditorTab::CharReplace,
         }
     }
 
@@ -5150,6 +5264,8 @@ impl ConfigEditorTab {
             ConfigEditorTab::General => 0,
             ConfigEditorTab::Graphics => 1,
             ConfigEditorTab::Gameplay => 2,
+            ConfigEditorTab::CharReplace => 3,
+            ConfigEditorTab::Experimental => 4,
         }
     }
 
@@ -5158,6 +5274,8 @@ impl ConfigEditorTab {
             ConfigEditorTab::General => "body_scroll_general",
             ConfigEditorTab::Graphics => "body_scroll_graphics",
             ConfigEditorTab::Gameplay => "body_scroll_gameplay",
+            ConfigEditorTab::CharReplace => "body_scroll_char_replace",
+            ConfigEditorTab::Experimental => "body_scroll_experimental",
         }
     }
 }
@@ -5262,11 +5380,58 @@ impl ConfigEditor {
             font_color_options,
             outline_size_options,
             outline_color_options,
+            char_replace_search: Mutex::new(String::new()),
+            chara_choices: Arc::new(ConfigEditor::load_chara_choices()),
+            dress_entries: Mutex::new(None),
             hachifont_items,
             hachifont_signature,
             hachifont_result,
             hachifont_last_stat: Instant::now(),
         }
+    }
+
+    /// Character ids with their (localized) names, for the replacement combos.
+    fn load_chara_choices() -> Vec<(i32, String)> {
+        let mut choices = vec![(0, t!("default").into_owned())];
+        let data = Hachimi::instance().chara_data.load();
+        for &id in data.chara_ids.iter() {
+            choices.push((id, format!("{} {}", id, data.get_name(id))));
+        }
+        choices.sort_by_key(|choice| choice.0);
+        choices
+    }
+
+    fn dress_combo_items(&self, entries: &[(i32, i32, String)], chara_id: i32, current: i32) -> Vec<(i32, String)> {
+        let localized = Hachimi::instance().localized_data.load();
+        let localized_dress = localized.text_data_dict.get(&14);
+
+        let mut items: Vec<(i32, String)> = entries.iter()
+            .filter(|(_, entry_chara_id, _)| chara_id <= 0 || *entry_chara_id == 0 || *entry_chara_id == chara_id)
+            .map(|(dress_id, _entry_chara_id, name)| {
+                let label = match localized_dress.and_then(|dict| dict.get(dress_id)) {
+                    Some(localized) => format!("{dress_id} {localized}"),
+                    None if name.is_empty() => format!("{dress_id}"),
+                    None => format!("{dress_id} {name}"),
+                };
+                (*dress_id, label)
+            })
+            .collect();
+
+        // Make sure the value already stored in the config stays selectable.
+        if current != 0 && !items.iter().any(|(dress_id, _)| *dress_id == current) {
+            let table_name = entries.iter()
+                .find(|(dress_id, _, _)| *dress_id == current)
+                .map(|(_, _, name)| name.as_str())
+                .unwrap_or("");
+            let label = match localized_dress.and_then(|dict| dict.get(&current)) {
+                Some(name) => format!("{current} {name}"),
+                None if !table_name.is_empty() => format!("{current} {table_name}"),
+                None => format!("{current}"),
+            };
+            items.insert(0, (current, label));
+        }
+        items.sort_by_key(|(dress_id, _)| *dress_id);
+        items
     }
 
     fn restore_defaults(&mut self) {
@@ -6677,11 +6842,180 @@ impl ConfigEditor {
         self.swipe_scroll_state_id = scroll_state_id_out;
     }
 
+    /// 「实验性功能(崩溃风险)」页：所有实验性开关集中在这里，两列布局。
+    fn experimental_page(&self, ui: &mut egui::Ui, config: &mut hachimi::Config, scale: f32) {
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+
+        let label_w = ui.available_width() * 0.62;
+        let column_spacing = 8.0 * scale;
+        let avail = ui.available_width();
+        let widget_col = (avail - label_w - column_spacing).max(60.0);
+        ui.spacing_mut().slider_width = (widget_col - 64.0 * scale).max(60.0);
+
+        egui::Grid::new(self.id.with("experimental_grid"))
+            .striped(true)
+            .num_columns(2)
+            .spacing([column_spacing, 4.0 * scale])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
+                ui.label(t!("config_editor.cutin_fov_scale"));
+                ui.add(egui::Slider::new(&mut config.cutin_fov_scale, 0.5..=3.0).step_by(0.05));
+                ui.end_row();
+
+                ui.label(t!("config_editor.cutin_progress_slider"));
+                ui.checkbox(&mut config.cutin_progress_slider, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.cutin_block_ui_events"));
+                ui.checkbox(&mut config.cutin_block_ui_events, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.cutin_first_person"));
+                ui.checkbox(&mut config.cutin_first_person, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.cutin_free_camera"));
+                ui.checkbox(&mut config.cutin_free_camera, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.intercept_error_dialog"));
+                ui.checkbox(&mut config.intercept_error_dialog, "");
+                ui.end_row();
+            });
+    }
+
+    fn char_replace_page(&self, ui: &mut egui::Ui, config: &mut hachimi::Config, scale: f32) {
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+        let search = self.search_term.clone();
+        let cfg = &mut config.replace_global_char;
+
+        if !should_show_option(&search, &t!("config_editor.char_replace_tab")) {
+            return;
+        }
+
+        // ── 解锁 + 替换（两列布局，与主页一致）
+        ui.label(t!("config_editor.char_replace_desc"));
+        ui.add_space(6.0);
+
+        let bv_all = &mut config.bv_unlock_all;
+        let label_w = ui.available_width() * 0.62;
+        egui::Grid::new(self.id.with("char_replace_grid"))
+            .striped(true)
+            .num_columns(2)
+            .spacing([8.0 * scale, 4.0 * scale])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
+                ui.label(t!("config_editor.bv_unlock_all"));
+                ui.checkbox(bv_all, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.char_replace_enable"));
+                ui.checkbox(&mut cfg.enable, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.char_replace_universal"));
+                ui.checkbox(&mut cfg.replace_universal, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.char_replace_auto_dress"));
+                ui.checkbox(&mut cfg.auto_dress, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.char_replace_cutscene"));
+                ui.checkbox(&mut cfg.replace_in_cutscene, "");
+                ui.end_row();
+            });
+        ui.add_space(6.0);
+        ui.separator();
+        ui.add_space(6.0);
+
+        if cfg.data.is_empty() {
+            ui.label(t!("config_editor.char_replace_empty"));
+            ui.add_space(4.0);
+        }
+
+        let chara_choices = self.chara_choices.clone();
+        let chara_items: Vec<(i32, &str)> = chara_choices.iter()
+            .map(|(id, name)| (*id, name.as_str()))
+            .collect();
+
+        let dress_entries = {
+            let mut slot = self.dress_entries.lock().unwrap();
+            if slot.is_none() {
+                *slot = Some(Arc::new(crate::il2cpp::sql::get_all_dress_entries()));
+            }
+            slot.as_ref().unwrap().clone()
+        };
+
+        let mut remove_index: Option<usize> = None;
+        for (index, entry) in cfg.data.iter_mut().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(format!("#{}", index + 1));
+                ui.label(t!("config_editor.char_replace_orig"));
+                Gui::run_combo_menu(
+                    ui,
+                    egui::Id::new("char_replace_orig").with(index),
+                    &mut entry.orig_char_id,
+                    &chara_items,
+                    &mut self.char_replace_search.lock().unwrap()
+                );
+                ui.label("\u{f061}");
+                ui.label(t!("config_editor.char_replace_new"));
+                Gui::run_combo_menu(
+                    ui,
+                    egui::Id::new("char_replace_new").with(index),
+                    &mut entry.new_char_id,
+                    &chara_items,
+                    &mut self.char_replace_search.lock().unwrap()
+                );
+            });
+
+            ui.horizontal(|ui| {
+                ui.label(t!("config_editor.char_replace_cloth"));
+                let dress_items = self.dress_combo_items(&dress_entries, entry.new_char_id, entry.new_cloth_id);
+                let dress_items: Vec<(i32, &str)> = dress_items.iter()
+                    .map(|(dress_id, name)| (*dress_id, name.as_str()))
+                    .collect();
+                Gui::run_combo_menu(
+                    ui,
+                    egui::Id::new("char_replace_cloth").with(index),
+                    &mut entry.new_cloth_id,
+                    &dress_items,
+                    &mut self.char_replace_search.lock().unwrap()
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button(t!("config_editor.char_replace_delete")).clicked() {
+                        remove_index = Some(index);
+                    }
+                    ui.checkbox(&mut entry.replace_mini, t!("config_editor.char_replace_mini"));
+                });
+            });
+            ui.add_space(4.0 * scale);
+        }
+
+        if let Some(index) = remove_index {
+            cfg.data.remove(index);
+        }
+
+        ui.add_space(6.0);
+        if ui.button(t!("config_editor.char_replace_add")).clicked() {
+            cfg.data.push(hachimi::GlobalCharReplaceEntry::default());
+        }
+    }
+
     fn options_page(&self, ui: &mut egui::Ui, config: &mut hachimi::Config, tab: ConfigEditorTab, scale: f32, column_spacing: f32) {
         ui.set_width(ui.available_width());
         egui::Frame::NONE
         .inner_margin(egui::Margin::symmetric(8, 0))
         .show(ui, |ui| {
+            if tab == ConfigEditorTab::CharReplace {
+                self.char_replace_page(ui, config, scale);
+                return;
+            }
+            if tab == ConfigEditorTab::Experimental {
+                self.experimental_page(ui, config, scale);
+                return;
+            }
             let label_w = ui.available_width() * 0.47;
             let grid_id = self.id.with("options_grid").with(tab.index() as u32).with(label_w.round() as i32);
             let avail = ui.available_width();
@@ -6972,7 +7306,14 @@ impl Window for ConfigEditor {
                         if self.search_term.is_empty() {
                             tab_bar(ui, "tabs_scroll", |ui| {
                                 for (tab, label) in ConfigEditorTab::display_list() {
-                                    if ui.selectable_label(self.current_tab == tab, label.as_ref()).clicked() {
+                                    if tab == ConfigEditorTab::CharReplace {
+                                        let selected = self.current_tab == tab;
+                                        let icon = egui::Image::new(egui::include_image!("../../assets/bv_icon.png"))
+                                            .fit_to_exact_size(egui::Vec2::splat(16.0 * scale));
+                                        if ui.add(egui::Button::image_and_text(icon, label.as_ref()).selected(selected)).clicked() {
+                                            self.current_tab = tab;
+                                        }
+                                    } else if ui.selectable_label(self.current_tab == tab, label.as_ref()).clicked() {
                                         self.current_tab = tab;
                                     }
                                 }

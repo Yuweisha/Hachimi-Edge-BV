@@ -120,6 +120,24 @@ extern "C" fn Transform_set_localPosition_Injected(this: *mut Il2CppObject, valu
     get_orig_fn!(Transform_set_localPosition_Injected, TransformSetVectorFn)(this, value);
 }
 
+
+/// 让 transform 朝向世界坐标点（up = 世界 Y）。由 Unity 计算朝向，
+/// 避免我们手写四元数时俯仰/滚转错位。
+#[cfg(target_os = "windows")]
+pub fn look_at(this: *mut Il2CppObject, target: Vector3_t) {
+    unsafe {
+        let addr = INTERNAL_LOOKAT_INJECTED_ADDR;
+        if addr == 0 || this.is_null() {
+            return;
+        }
+        let mut pos = target;
+        let mut up = Vector3_t { x: 0.0, y: 1.0, z: 0.0 };
+        let f: extern "C" fn(*mut Il2CppObject, *mut Vector3_t, *mut Vector3_t) =
+            std::mem::transmute(addr);
+        f(this, &mut pos, &mut up);
+    }
+}
+
 #[cfg(target_os = "windows")]
 extern "C" fn Transform_Internal_LookAt_Injected(
     this: *mut Il2CppObject,

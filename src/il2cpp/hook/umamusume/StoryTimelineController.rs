@@ -1,6 +1,9 @@
 use std::sync::{atomic::{self, AtomicI32}, Mutex};
 
-use crate::{core::Hachimi, il2cpp::{symbols::{get_method_addr, GCHandle}, types::*}};
+use crate::{core::Hachimi, il2cpp::{
+    symbols::{get_method_addr, GCHandle},
+    types::*,
+}};
 
 static mut GET_ISFINISHED_ADDR: usize = 0;
 impl_addr_wrapper_fn!(get_IsFinished, GET_ISFINISHED_ADDR, bool, this: *mut Il2CppObject);

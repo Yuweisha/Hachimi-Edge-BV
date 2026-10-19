@@ -3,6 +3,8 @@ pub mod TextId;
 pub mod StoryRaceTextAsset;
 mod LyricsController;
 pub mod StoryTimelineData;
+#[cfg(target_os = "windows")]
+pub mod ErrorSkip;
 pub mod StoryTimelineBlockData;
 pub mod StoryTimelineTrackData;
 pub mod StoryTimelineTextClipData;
@@ -55,7 +57,7 @@ mod CharacterNoteTopView;
 mod CharacterNoteTopViewController;
 mod ViewControllerBase;
 mod ButtonCommon;
-mod NowLoading;
+pub mod NowLoading;
 pub mod StoryTimelineController;
 mod DialogRaceOrientation;
 pub mod RaceDefine;
@@ -66,6 +68,9 @@ mod SaveDataManager;
 mod ApplicationSettingSaveLoader;
 mod LiveTheaterCharaSelect;
 mod LiveTheaterViewController;
+mod LiveTheaterUnlock;
+mod CharacterNoteUnlock;
+pub mod MovieProbe;
 pub mod CySpringController;
 mod LiveUtil;
 pub mod MasterDataUtil;
@@ -100,6 +105,7 @@ pub mod LiveTimelineKeyCameraPositionData;
 mod LiveTimelineKeyCameraLookAtData;
 #[cfg(target_os = "windows")]
 mod LiveTimelineKeyMultiCameraPositionData;
+mod CharacterBuildInfo;
 #[cfg(target_os = "windows")]
 mod CharacterObject;
 #[cfg(target_os = "windows")]
@@ -252,6 +258,9 @@ pub fn init() {
     ApplicationSettingSaveLoader::init(image);
     LiveTheaterCharaSelect::init(image);
     LiveTheaterViewController::init(image);
+    LiveTheaterUnlock::init(image);
+    CharacterNoteUnlock::init(image);
+    MovieProbe::init(image);
     CySpringController::init(image);
     LiveUtil::init(image);
     MasterDataUtil::init(image);
@@ -267,6 +276,7 @@ pub fn init() {
     SceneManager::init(image);
     LowResolutionCamera::init(image);
     TapEffectController::init(image);
+    CharacterBuildInfo::init(image);
 
     #[cfg(target_os = "windows")]
     {
@@ -357,4 +367,6 @@ pub fn init() {
     DownloadPathRegister::init(image);
     MasterDataManager::init(image);
     MasterItemExchangeTop::init(image);
+    #[cfg(target_os = "windows")]
+    ErrorSkip::init(image);
 }

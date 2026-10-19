@@ -1,4 +1,6 @@
 use std::ptr::null_mut;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 
 use serde::{Deserialize, Serialize};
 use widestring::Utf16Str;
@@ -6,11 +8,11 @@ use widestring::Utf16Str;
 use crate::{
     core::{ext::Utf16StringExt, game::Region, utils, Hachimi, SugoiClient},
     il2cpp::{
-        ext::{Il2CppStringExt, Il2CppObjectExt, StringExt}, hook::{umamusume::{StoryTimelineBg3DClipData, StoryTimelineCharaTrackData, StoryTimelineClipData}, UnityEngine_AssetBundleModule::AssetBundle::ASSET_PATH_PREFIX}, symbols::{get_field_from_name, get_field_object_value, get_field_value, set_field_object_value, set_field_value, IList}, types::*
+        ext::{Il2CppStringExt, Il2CppObjectExt, StringExt}, hook::{umamusume::{StoryTimelineBg3DClipData, StoryTimelineCharaTrackData, StoryTimelineClipData}, UnityEngine_AssetBundleModule::AssetBundle::ASSET_PATH_PREFIX}, symbols::{get_field_from_name, get_field_object_value, get_field_value, set_field_object_value, set_field_value, IList}, sql, types::*
     }
 };
 
-use super::{StoryTimelineBlockData, StoryTimelineTextClipData, StoryTimelineTrackData};
+use super::{CharacterBuildInfo::{auto_pick_dress_for_track, find_replacement}, StoryTimelineBlockData, StoryTimelineTextClipData, StoryTimelineTrackData};
 
 const CLIP_TEXT_LINE_WIDTH: i32 = 21;
 const CLIP_TEXT_LINE_COUNT: i32 = 3;
@@ -23,6 +25,8 @@ const CLIP_TEXT_FONT_SIZE_BOLD_CAPTION: i32 = 64;
 
 // probably?
 const STORY_VIEW_CLIP_TEXT_LINE_WIDTH: i32 = 32;
+
+pub static SKIP_CUTSCENE_REPLACE: AtomicBool = AtomicBool::new(false);
 
 static mut CLASS: *mut Il2CppClass = null_mut();
 pub fn class() -> *mut Il2CppClass {
@@ -112,6 +116,13 @@ pub fn on_LoadAsset(_bundle: *mut Il2CppObject, this: *mut Il2CppObject, name: &
     rewrite_story_shadow_types(this);
 
     let base_path = name[ASSET_PATH_PREFIX.len()..].path_basename();
+
+    let bp = base_path.to_string();
+    let is_80 = bp.contains("/80/") || bp.starts_with("story/data/80");
+    SKIP_CUTSCENE_REPLACE.store(is_80, Ordering::Release);
+    replace_story_chara_tracks(this, &bp);
+
+
     let dict_path = base_path.to_string() + ".json";
 
     let localized_data = hachimi.localized_data.load();
@@ -292,6 +303,61 @@ pub fn on_LoadAsset(_bundle: *mut Il2CppObject, this: *mut Il2CppObject, name: &
 
 fn get_typewrite_length(text_len: usize, tcps: f32) -> i32 {
     (text_len as f32 / tcps * 30.0).round() as i32 // len / cps * fps
+}
+
+fn replace_story_chara_tracks(this: *mut Il2CppObject, base_path: &str) {
+    let hachimi = Hachimi::instance();
+    let config = hachimi.config.load();
+    let char_replace = &config.replace_global_char;
+
+    if !char_replace.enable || char_replace.data.is_empty() {
+        return;
+    }
+
+    // 80 段 = 支援卡随机事件（如「成长的灵感」）。这类事件的过场替换会让游戏
+    // 卡在加载阶段（资源齐全但装配流程不推进），整段跳过替换。
+    if SKIP_CUTSCENE_REPLACE.load(Ordering::Acquire) {
+        debug!("[story] 跳过 80 段（支援卡事件）: {}", base_path);
+        return;
+    }
+
+    let Some(block_list) = <IList>::new(get_BlockList(this)) else {
+        return;
+    };
+
+    let mut replaced = 0usize;
+    for block_data in block_list.iter() {
+        if block_data.is_null() {
+            continue;
+        }
+        let Some(chara_track_list) = <IList>::new(StoryTimelineBlockData::get_CharacterTrackList(block_data)) else {
+            continue;
+        };
+        for chara_track_data in chara_track_list.iter() {
+            if chara_track_data.is_null() {
+                continue;
+            }
+            let chara_id = StoryTimelineCharaTrackData::get_CharaId(chara_track_data);
+            let Some((new_chara_id, new_dress_id)) = find_replacement(char_replace, chara_id, false) else {
+                continue;
+            };
+            let old_dress = StoryTimelineCharaTrackData::get_DressId(chara_track_data);
+            let old_head = StoryTimelineCharaTrackData::get_HeadId(chara_track_data);
+            let nd = auto_pick_dress_for_track(old_dress, new_chara_id, new_dress_id);
+            let (new_dress, new_head) = (nd, sql::get_head_id_from_dress_id(nd));
+            let _ = old_head;
+            StoryTimelineCharaTrackData::set_track_chara(chara_track_data, new_chara_id, new_dress, new_head);
+            replaced += 1;
+            debug!(
+                "[story] 轨道替换: chara {}->{} dress {}->{} head {}->{}",
+                chara_id, new_chara_id, old_dress, new_dress, old_head, new_head
+            );
+        }
+    }
+
+    if replaced > 0 {
+        debug!("[story] 替换了 {} 个角色轨道", replaced);
+    }
 }
 
 fn rewrite_story_shadow_types(this: *mut Il2CppObject) {
