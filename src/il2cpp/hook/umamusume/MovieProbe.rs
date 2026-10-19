@@ -479,32 +479,6 @@ unsafe fn camera_world_rotation(tr: *mut Il2CppObject) -> Option<Quaternion_t> {
 }
 
 #[cfg(target_os = "windows")]
-unsafe fn find_named_child(root: *mut Il2CppObject, depth: i32) -> Option<*mut Il2CppObject> {
-    use crate::il2cpp::hook::UnityEngine_CoreModule::{Component, Transform};
-    if root.is_null() || depth < 0 {
-        return None;
-    }
-    let count = Transform::get_childCount(root);
-    for i in 0..count {
-        let child = Transform::GetChild(root, i);
-        if child.is_null() {
-            continue;
-        }
-        let go = Component::get_gameObject(child);
-        if !go.is_null() {
-            let name = transform_name(go).to_lowercase();
-            if name.contains("head") || name == "m_hair" || name == "m_face" {
-                return Some(child);
-            }
-        }
-        if let Some(found) = find_named_child(child, depth - 1) {
-            return Some(found);
-        }
-    }
-    None
-}
-
-#[cfg(target_os = "windows")]
 unsafe fn transform_name(tr: *mut Il2CppObject) -> String {
     use crate::il2cpp::ext::Il2CppStringExt;
     // UnityEngine.Object.get_name

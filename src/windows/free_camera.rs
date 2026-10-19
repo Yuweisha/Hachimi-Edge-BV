@@ -374,28 +374,7 @@ impl Quat {
         Self { w: self.w, x: -self.x, y: -self.y, z: -self.z }
     }
 
-    /// 四元数乘法（this * rhs）
-    fn mul(self, r: Self) -> Self {
-        Self {
-            w: self.w * r.w - self.x * r.x - self.y * r.y - self.z * r.z,
-            x: self.w * r.x + self.x * r.w + self.y * r.z - self.z * r.y,
-            y: self.w * r.y - self.x * r.z + self.y * r.w + self.z * r.x,
-            z: self.w * r.z + self.x * r.y - self.y * r.x + self.z * r.w,
-        }
-    }
 
-    /// Unity 的 Quaternion.Euler(pitch, yaw, roll)，角度制
-    fn from_euler(pitch: f32, yaw: f32, roll: f32) -> Self {
-        let (sp, cp) = ((pitch.to_radians() * 0.5).sin(), (pitch.to_radians() * 0.5).cos());
-        let (sy, cy) = ((yaw.to_radians() * 0.5).sin(), (yaw.to_radians() * 0.5).cos());
-        let (sr, cr) = ((roll.to_radians() * 0.5).sin(), (roll.to_radians() * 0.5).cos());
-        Self {
-            w: cy * cp * cr + sy * sp * sr,
-            x: cy * sp * cr + sy * cp * sr,
-            y: sy * cp * cr - cy * sp * sr,
-            z: cy * cp * sr - sy * sp * cr,
-        }
-    }
 
     /// 用四元数旋转向量
     fn rotate(self, v: Vec3) -> Vec3 {
@@ -479,6 +458,7 @@ impl Quat {
     }
 }
 
+
 impl std::ops::Mul for Quat {
     type Output = Quat;
 
@@ -527,11 +507,6 @@ struct FreeCameraState {
     camera_pos: Vec3,
     camera_look_at: Vec3,
     camera_rotation: Option<Quat>,
-    /// 进入 cutin 时记录的相机基准旋转（游戏自己的朝向），拖动只在其上叠加增量
-    cutin_base: Option<Quat>,
-    /// 由 cutin_base 预先算出的前/右向量（避免持锁时再取锁）
-    cutin_fwd: Vec3,
-    cutin_right: Vec3,
     yaw: f32,
     pitch: f32,
     live_fov: f32,
@@ -584,9 +559,6 @@ impl FreeCameraState {
             camera_pos: Vec3::default(),
             camera_look_at: Vec3::default(),
             camera_rotation: None,
-            cutin_base: None,
-            cutin_fwd: Vec3::new(0.0, 0.0, -1.0),
-            cutin_right: Vec3::new(1.0, 0.0, 0.0),
             yaw: 0.0,
             pitch: 0.0,
             live_fov: config.live_fov,
@@ -995,43 +967,6 @@ pub fn camera_look_at() -> Vector3_t {
 }
 
 
-/// 由朝向向量算四元数（等价 UnityEngine.Quaternion.LookRotation，up = +Y）。
-pub fn look_at(transform: *mut Il2CppObject, target: Vector3_t) {
-    crate::il2cpp::hook::UnityEngine_CoreModule::Transform::look_at(transform, target);
-}
-
-pub fn look_rotation(dir: Vector3_t) -> Option<Quaternion_t> {
-    // 保留旧接口（供 Race 场景使用），仅在无 look_at 时兜底
-    let len = (dir.x * dir.x + dir.y * dir.y + dir.z * dir.z).sqrt();
-    if len < 1e-5 {
-        return None;
-    }
-    let f = Vec3::new(dir.x / len, dir.y / len, dir.z / len);
-    let yaw = f.x.atan2(-f.z);
-    let pitch = f.y.clamp(-1.0, 1.0).asin();
-    let (sy, cy) = ((yaw * 0.5).sin(), (yaw * 0.5).cos());
-    let (sp, cp) = ((pitch * 0.5).sin(), (pitch * 0.5).cos());
-    Some(Quaternion_t {
-        w: cy * cp,
-        x: -cy * sp,
-        y: sy * cp,
-        z: sy * sp,
-    })
-}
-
-
-/// cutin 相机基准旋转（进入时记录的朝游戏相机朝向）
-pub fn cutin_base_rotation() -> Option<Quaternion_t> {
-    STATE.lock().unwrap().cutin_base.map(|q| q.to_quaternion())
-}
-
-/// 在当前 cutin 基准上叠加 yaw/pitch 增量，得到最终朝向
-pub fn cutin_rotation_with_delta() -> Option<Quaternion_t> {
-    let state = STATE.lock().unwrap();
-    let base = state.cutin_base?;
-    let delta = Quat::from_euler(state.pitch, state.yaw, 0.0);
-    Some(base.mul(delta).normalized().to_quaternion())
-}
 
 pub fn camera_rotation() -> Option<Quaternion_t> {
     STATE.lock().unwrap().camera_rotation.map(|rot| rot.to_quaternion())
@@ -1122,12 +1057,10 @@ pub fn ensure_cutin_start(pos: Vector3_t, rot: Quaternion_t) {
     state.camera_pos = Vec3::from(pos);
     let q = Quat::from_quaternion(rot);
     state.camera_rotation = Some(q);
-    state.cutin_base = Some(q);
-    state.cutin_fwd = q.rotate(Vec3::new(0.0, 0.0, -1.0));
-    state.cutin_right = q.rotate(Vec3::new(1.0, 0.0, 0.0));
     // 关键：camera_look_at 默认为 (0,0,0)，会让移动方向始终指向世界原点（走弧线）。
     // 用游戏相机的前方向铺一个 20 米远的目标点。
-    state.camera_look_at = state.camera_pos + state.cutin_fwd * 20.0;
+    let fwd = q.rotate(Vec3::new(0.0, 0.0, -1.0));
+    state.camera_look_at = state.camera_pos + fwd * 20.0;
     state.live_fov = state.live_fov.max(30.0);
 }
 
