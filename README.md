@@ -1,7 +1,8 @@
 <img align="left" width="80" height="80" src="assets/icon.png">
 
 # Hachimi Edge
-[繁體中文](README-zh_tw.md)
+ 
+English | [简体中文](README-zh_cn.md) | [繁體中文](README-zh_tw.md) | [Filipino](README-fil.md) | [한국어](README-ko.md)
 
 # 本分支仅面向中文用户提供完整支援
 # This branch is only full supported in chinese language.
