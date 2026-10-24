@@ -749,7 +749,6 @@ pub enum ShortcutOption {
     ThemeEditor,
     FreeCamera,
     LiveVocalsSwap,
-    /// 直接切换自由视角开关（不开设置窗口）。
     FreeCameraToggle
 }
 
@@ -1018,6 +1017,9 @@ pub struct Config {
     #[serde(default = "Config::default_bv_unlock_all")]
     pub bv_unlock_all: bool,
 
+    #[serde(default = "Config::default_unlock_all_live")]
+    pub unlock_all_live: bool,
+
     #[serde(default = "Config::default_cutin_fov_scale")]
     pub cutin_fov_scale: f32,
 
@@ -1074,6 +1076,8 @@ impl Config {
     fn default_champions_live_year() -> i32 { 2025 }
     pub fn default_ui_accent() -> egui::Color32 { egui::Color32::from_rgb(100, 150, 240) }
     pub fn default_bv_unlock_all() -> bool { true }
+
+    pub fn default_unlock_all_live() -> bool { true }
     pub fn default_cutin_fov_scale() -> f32 { 1.0 }
     pub fn default_cutin_progress_slider() -> bool { true }
     pub fn default_cutin_block_ui_events() -> bool { true }

@@ -3351,7 +3351,6 @@ impl Gui {
                                         .trailing_fill(true)
                                 );
                                 if res.changed() {
-                                    // 拖动只定位，播放/暂停由左侧按钮手动控制
                                     MovieProbe::cutin_seek(cur);
                                 }
                             });
@@ -6881,6 +6880,7 @@ impl ConfigEditor {
                 ui.label(t!("config_editor.intercept_error_dialog"));
                 ui.checkbox(&mut config.intercept_error_dialog, "");
                 ui.end_row();
+
             });
     }
 
@@ -6907,6 +6907,10 @@ impl ConfigEditor {
             .show(ui, |ui| {
                 ui.label(t!("config_editor.bv_unlock_all"));
                 ui.checkbox(bv_all, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.unlock_all_live"));
+                ui.checkbox(&mut config.unlock_all_live, "");
                 ui.end_row();
 
                 ui.label(t!("config_editor.char_replace_enable"));

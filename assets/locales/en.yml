@@ -185,6 +185,7 @@ config_editor:
   char_replace_empty: "No replacement rules yet."
   char_replace_add: "\uf067 Add rule"
   bv_unlock_all: "Unlock unobtained characters and dresses (Live Theater)"
+  unlock_all_live: "Unlock all Live"
   cutin_fov_scale: "Cut-in FOV (camera offset counter)"
   cutin_progress_slider: "Enable animation progress bar"
   cutin_free_camera: "Cutscene Free Camera"

@@ -173,6 +173,7 @@ config_editor:
   char_replace_empty:
   char_replace_add: "\uf067 添加规则"
   bv_unlock_all: "解锁未拥有的赛马娘与服装（Live 剧场）"
+  unlock_all_live: "解锁全部Live"
   cutin_fov_scale: "特写FOV（镜头偏移对抗）"
   cutin_progress_slider: "启用动画进度条"
   cutin_free_camera: "过场动画自由视角"

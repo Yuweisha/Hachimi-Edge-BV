@@ -5,6 +5,7 @@ mod LyricsController;
 pub mod StoryTimelineData;
 #[cfg(target_os = "windows")]
 pub mod ErrorSkip;
+pub mod LiveUnlock;
 pub mod StoryTimelineBlockData;
 pub mod StoryTimelineTrackData;
 pub mod StoryTimelineTextClipData;
@@ -259,7 +260,7 @@ pub fn init() {
     LiveTheaterCharaSelect::init(image);
     LiveTheaterViewController::init(image);
     LiveTheaterUnlock::init(image);
-    CharacterNoteUnlock::init(image);
+                    CharacterNoteUnlock::init(image);
     MovieProbe::init(image);
     CySpringController::init(image);
     LiveUtil::init(image);
@@ -369,4 +370,5 @@ pub fn init() {
     MasterItemExchangeTop::init(image);
     #[cfg(target_os = "windows")]
     ErrorSkip::init(image);
+    LiveUnlock::init(image);
 }
