@@ -26,3 +26,14 @@ __pycache__/
 /tools/release/
 *.exe
 *.bin
+
+# 反编译中间产物（几百 MB，不入库）
+/docs/decompiled.c
+/docs/decompiled_dump.txt
+/docs/decompiled_full.txt
+/docs/decompiled.txt
+/docs/decompiled_at.txt
+/docs/global-metadata_dump.dat
+/docs/metadata_jp_recovered.dat
+/docs/metadata_names.txt
+/docs/master_patched.mdb

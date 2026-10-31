@@ -1,0 +1,697 @@
+{
+  "response_code": 1,
+  "data_headers": {
+    "viewer_id": 601653962,
+    "sid": "[REDACTED]",
+    "servertime": 1792761505,
+    "result_code": 1,
+    "notifications": {
+      "unread_information_exists": 1,
+      "trophy_badge_flag": 1,
+      "training_report_receivable_reward_flag": 1
+    }
+  },
+  "data": {
+    "live_theater_save_info_array": [
+      {
+        "music_id": 1006,
+        "member_info_array": [
+          {
+            "chara_id": 1030,
+            "mob_id": 0,
+            "dress_id": 103001,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1003,
+            "mob_id": 0,
+            "dress_id": 100343,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1011,
+            "mob_id": 0,
+            "dress_id": 101101,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1032,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1027,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1052,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1035,
+            "mob_id": 0,
+            "dress_id": 103501,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1007,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1001,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1074,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1021,
+            "mob_id": 0,
+            "dress_id": 102101,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1066,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1024,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1008,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1062,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1014,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1054,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1060,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 2,
+            "color_id2": 0
+          }
+        ],
+        "is_skip_story": 0
+      },
+      {
+        "music_id": 1025,
+        "member_info_array": [
+          {
+            "chara_id": 1025,
+            "mob_id": 0,
+            "dress_id": 2,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          }
+        ],
+        "is_skip_story": 0
+      },
+      {
+        "music_id": 1026,
+        "member_info_array": [
+          {
+            "chara_id": 1030,
+            "mob_id": 0,
+            "dress_id": 103001,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          }
+        ],
+        "is_skip_story": 0
+      },
+      {
+        "music_id": 1032,
+        "member_info_array": [
+          {
+            "chara_id": 1068,
+            "mob_id": 0,
+            "dress_id": 106802,
+            "dress_id2": 51,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1091,
+            "mob_id": 0,
+            "dress_id": 109101,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1030,
+            "mob_id": 0,
+            "dress_id": 103001,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1062,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 1,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1001,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 1,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1063,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 1,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1003,
+            "mob_id": 0,
+            "dress_id": 100301,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1066,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 1,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1009,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 1,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1089,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 1,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1008,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 1,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1070,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 1,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1007,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 1,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1060,
+            "mob_id": 0,
+            "dress_id": 106001,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1052,
+            "mob_id": 0,
+            "dress_id": 7,
+            "dress_id2": 0,
+            "color_id": 1,
+            "color_id2": 0
+          }
+        ],
+        "is_skip_story": 0
+      },
+      {
+        "music_id": 1033,
+        "member_info_array": [
+          {
+            "chara_id": 1030,
+            "mob_id": 0,
+            "dress_id": 51,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1091,
+            "mob_id": 0,
+            "dress_id": 51,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1068,
+            "mob_id": 0,
+            "dress_id": 51,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          }
+        ],
+        "is_skip_story": 0
+      },
+      {
+        "music_id": 1036,
+        "member_info_array": [
+          {
+            "chara_id": 1030,
+            "mob_id": 0,
+            "dress_id": 103001,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1011,
+            "mob_id": 0,
+            "dress_id": 101101,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1068,
+            "mob_id": 0,
+            "dress_id": 106802,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1009,
+            "mob_id": 0,
+            "dress_id": 100901,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1003,
+            "mob_id": 0,
+            "dress_id": 100343,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1001,
+            "mob_id": 0,
+            "dress_id": 100101,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          }
+        ],
+        "is_skip_story": 0
+      },
+      {
+        "music_id": 1083,
+        "member_info_array": [
+          {
+            "chara_id": 1030,
+            "mob_id": 0,
+            "dress_id": 103001,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1003,
+            "mob_id": 0,
+            "dress_id": 100343,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1009,
+            "mob_id": 0,
+            "dress_id": 31,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1021,
+            "mob_id": 0,
+            "dress_id": 102101,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1024,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1054,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1061,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1077,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1008,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1066,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1041,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1001,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1014,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1063,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1007,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1045,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1060,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1062,
+            "mob_id": 0,
+            "dress_id": 32,
+            "dress_id2": 0,
+            "color_id": 3,
+            "color_id2": 0
+          }
+        ],
+        "is_skip_story": 0
+      },
+      {
+        "music_id": 1092,
+        "member_info_array": [
+          {
+            "chara_id": 1030,
+            "mob_id": 0,
+            "dress_id": 103001,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1025,
+            "mob_id": 0,
+            "dress_id": 102513,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1003,
+            "mob_id": 0,
+            "dress_id": 100343,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1068,
+            "mob_id": 0,
+            "dress_id": 106802,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1011,
+            "mob_id": 0,
+            "dress_id": 101101,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1021,
+            "mob_id": 0,
+            "dress_id": 102101,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          }
+        ],
+        "is_skip_story": 0
+      },
+      {
+        "music_id": 1156,
+        "member_info_array": [
+          {
+            "chara_id": 1068,
+            "mob_id": 0,
+            "dress_id": 106802,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1091,
+            "mob_id": 0,
+            "dress_id": 109130,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1030,
+            "mob_id": 0,
+            "dress_id": 103001,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1011,
+            "mob_id": 0,
+            "dress_id": 101101,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1009,
+            "mob_id": 0,
+            "dress_id": 51,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1025,
+            "mob_id": 0,
+            "dress_id": 51,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1060,
+            "mob_id": 0,
+            "dress_id": 51,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1001,
+            "mob_id": 0,
+            "dress_id": 51,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1024,
+            "mob_id": 0,
+            "dress_id": 51,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          },
+          {
+            "chara_id": 1061,
+            "mob_id": 0,
+            "dress_id": 51,
+            "dress_id2": 0,
+            "color_id": 0,
+            "color_id2": 0
+          }
+        ],
+        "is_skip_story": 0
+      }
+    ],
+    "live_theater_last_checked_time": 1792761381
+  }
+}
