@@ -1,0 +1,509 @@
+{
+  "data": {
+    "add_trained_chara_array": [],
+    "mission_list": [],
+    "progress_info": {
+      "chara_info": {
+        "card_id": 111401,
+        "chara_effect_id_array": [],
+        "chara_grade": 1,
+        "default_max_guts": 1200,
+        "default_max_power": 1200,
+        "default_max_speed": 1200,
+        "default_max_stamina": 1200,
+        "default_max_wiz": 1200,
+        "disable_skill_id_array": [],
+        "evaluation_info_array": [
+          {
+            "evaluation": 35,
+            "group_outing_info_array": [],
+            "is_appear": 1,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 1,
+            "training_partner_id": 1
+          },
+          {
+            "evaluation": 30,
+            "group_outing_info_array": [],
+            "is_appear": 1,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 2,
+            "training_partner_id": 2
+          },
+          {
+            "evaluation": 35,
+            "group_outing_info_array": [],
+            "is_appear": 1,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 3,
+            "training_partner_id": 3
+          },
+          {
+            "evaluation": 30,
+            "group_outing_info_array": [],
+            "is_appear": 1,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 4,
+            "training_partner_id": 4
+          },
+          {
+            "evaluation": 40,
+            "group_outing_info_array": [],
+            "is_appear": 1,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 5,
+            "training_partner_id": 5
+          },
+          {
+            "evaluation": 30,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 6,
+            "training_partner_id": 6
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 101,
+            "training_partner_id": 101
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 102,
+            "training_partner_id": 102
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 103,
+            "training_partner_id": 103
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 104,
+            "training_partner_id": 104
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 106,
+            "training_partner_id": 106
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 108,
+            "training_partner_id": 108
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 109,
+            "training_partner_id": 109
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 110,
+            "training_partner_id": 110
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 111,
+            "training_partner_id": 111
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 112,
+            "training_partner_id": 112
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 113,
+            "training_partner_id": 113
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 114,
+            "training_partner_id": 114
+          },
+          {
+            "evaluation": 0,
+            "group_outing_info_array": [],
+            "is_appear": 0,
+            "is_outing": 0,
+            "story_step": 0,
+            "target_id": 115,
+            "training_partner_id": 115
+          }
+        ],
+        "fans": 1,
+        "guest_outing_info_array": [],
+        "guts": 99,
+        "is_non_short_cut_unchecked_event": 1,
+        "is_short_race": 0,
+        "max_guts": 1700,
+        "max_power": 1825,
+        "max_speed": 2216,
+        "max_stamina": 1866,
+        "max_vital": 100,
+        "max_wiz": 1832,
+        "motivation": 3,
+        "nickname_id_array": [],
+        "playing_state": 1,
+        "power": 155,
+        "proper_distance_long": 5,
+        "proper_distance_middle": 7,
+        "proper_distance_mile": 7,
+        "proper_distance_short": 4,
+        "proper_ground_dirt": 5,
+        "proper_ground_turf": 7,
+        "proper_running_style_nige": 1,
+        "proper_running_style_oikomi": 7,
+        "proper_running_style_sashi": 7,
+        "proper_running_style_senko": 6,
+        "race_program_id": 0,
+        "race_running_style": 4,
+        "rarity": 5,
+        "reserve_race_program_id": 0,
+        "route_id": 121,
+        "route_race_id_array": [
+          1505,
+          1506,
+          1507,
+          1508,
+          1509,
+          1510,
+          1511,
+          1512,
+          1513,
+          1514,
+          1515,
+          1516,
+          1517,
+          1518
+        ],
+        "scenario_id": 15,
+        "short_cut_state": 1,
+        "single_mode_chara_id": 170,
+        "skill_array": [
+          {
+            "level": 3,
+            "skill_id": 101141
+          }
+        ],
+        "skill_point": 0,
+        "skill_tips_array": [
+          {
+            "group_id": 20146,
+            "level": 3,
+            "rarity": 1
+          },
+          {
+            "group_id": 20287,
+            "level": 3,
+            "rarity": 2
+          },
+          {
+            "group_id": 20287,
+            "level": 3,
+            "rarity": 1
+          },
+          {
+            "group_id": 20353,
+            "level": 3,
+            "rarity": 1
+          },
+          {
+            "group_id": 20379,
+            "level": 3,
+            "rarity": 1
+          },
+          {
+            "group_id": 20406,
+            "level": 3,
+            "rarity": 2
+          },
+          {
+            "group_id": 20406,
+            "level": 3,
+            "rarity": 1
+          },
+          {
+            "group_id": 90014,
+            "level": 2,
+            "rarity": 1
+          },
+          {
+            "group_id": 91091,
+            "level": 2,
+            "rarity": 1
+          }
+        ],
+        "skill_upgrade_info_array": [
+          {
+            "condition_id": 11140101,
+            "current_count": 155,
+            "total_count": 800
+          },
+          {
+            "condition_id": 11140102,
+            "current_count": 154,
+            "total_count": 800
+          },
+          {
+            "condition_id": 11140103,
+            "current_count": 0,
+            "total_count": 2
+          },
+          {
+            "condition_id": 11140104,
+            "current_count": 0,
+            "total_count": 6
+          },
+          {
+            "condition_id": 41501101,
+            "current_count": 0,
+            "total_count": 1
+          },
+          {
+            "condition_id": 41502101,
+            "current_count": 0,
+            "total_count": 1
+          },
+          {
+            "condition_id": 41503101,
+            "current_count": 0,
+            "total_count": 1
+          },
+          {
+            "condition_id": 41504101,
+            "current_count": 0,
+            "total_count": 1
+          },
+          {
+            "condition_id": 41505101,
+            "current_count": 0,
+            "total_count": 2
+          },
+          {
+            "condition_id": 41505102,
+            "current_count": 0,
+            "total_count": 2
+          },
+          {
+            "condition_id": 41505103,
+            "current_count": 0,
+            "total_count": 1
+          },
+          {
+            "condition_id": 41506101,
+            "current_count": 0,
+            "total_count": 2
+          },
+          {
+            "condition_id": 41506102,
+            "current_count": 0,
+            "total_count": 1
+          }
+        ],
+        "speed": 141,
+        "stamina": 118,
+        "start_time": "2026-10-28 17:38:38",
+        "state": 0,
+        "succession_trained_chara_id_1": 196,
+        "succession_trained_chara_id_2": 251,
+        "support_card_array": [
+          {
+            "exp": 118185,
+            "is_rental": false,
+            "limit_break_count": 4,
+            "owner_viewer_id": 0,
+            "position": 1,
+            "rental_type": 0,
+            "support_card_id": 30206
+          },
+          {
+            "exp": 118185,
+            "is_rental": false,
+            "limit_break_count": 4,
+            "owner_viewer_id": 0,
+            "position": 2,
+            "rental_type": 0,
+            "support_card_id": 30242
+          },
+          {
+            "exp": 118185,
+            "is_rental": false,
+            "limit_break_count": 4,
+            "owner_viewer_id": 0,
+            "position": 3,
+            "rental_type": 0,
+            "support_card_id": 30256
+          },
+          {
+            "exp": 118185,
+            "is_rental": false,
+            "limit_break_count": 4,
+            "owner_viewer_id": 0,
+            "position": 4,
+            "rental_type": 0,
+            "support_card_id": 30289
+          },
+          {
+            "exp": 118185,
+            "is_rental": false,
+            "limit_break_count": 4,
+            "owner_viewer_id": 0,
+            "position": 5,
+            "rental_type": 0,
+            "support_card_id": 30029
+          },
+          {
+            "exp": 118185,
+            "is_rental": false,
+            "limit_break_count": 4,
+            "owner_viewer_id": 120171286164,
+            "position": 6,
+            "rental_type": 0,
+            "support_card_id": 30323
+          }
+        ],
+        "talent_level": 5,
+        "training_level_info_array": [
+          {
+            "command_id": 101,
+            "level": 1
+          },
+          {
+            "command_id": 102,
+            "level": 1
+          },
+          {
+            "command_id": 103,
+            "level": 1
+          },
+          {
+            "command_id": 105,
+            "level": 1
+          },
+          {
+            "command_id": 106,
+            "level": 1
+          },
+          {
+            "command_id": 5101,
+            "level": 1
+          },
+          {
+            "command_id": 5102,
+            "level": 1
+          },
+          {
+            "command_id": 5103,
+            "level": 1
+          },
+          {
+            "command_id": 5104,
+            "level": 1
+          },
+          {
+            "command_id": 5105,
+            "level": 1
+          }
+        ],
+        "turn": 1,
+        "vital": 100,
+        "wiz": 154
+      },
+      "dress_id": 0,
+      "effected_trainer_skill_id_array": [],
+      "end_time": "2026-10-28 18:28:38",
+      "start_time": "2026-10-28 17:38:38",
+      "story_event_chara_bonus_list": [],
+      "story_event_mission_list": []
+    },
+    "story_event_chara_bonus_list": [],
+    "story_event_mission_list": [],
+    "tp_info": {
+      "current_tp": 70,
+      "max_recovery_time": 1793194718,
+      "max_tp": 100
+    },
+    "training_roadmap_selected_info": null,
+    "user_item_array": []
+  },
+  "data_headers": {
+    "notifications": {
+      "new_honor_data_array": [
+        {
+          "create_time": "2026-10-27 18:15:40",
+          "honor_id": 515101
+        },
+        {
+          "create_time": "2026-10-27 18:16:36",
+          "honor_id": 515102
+        },
+        {
+          "create_time": "2026-10-27 02:15:07",
+          "honor_id": 720015
+        }
+      ],
+      "unread_information_exists": 1
+    },
+    "result_code": 1,
+    "servertime": 1793176718,
+    "sid": "e0ff6a296b6bb11945999a5cbc4beb14c0f2f68f7e",
+    "viewer_id": 601653962
+  },
+  "response_code": 1
+}

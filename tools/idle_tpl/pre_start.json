@@ -1,0 +1,90 @@
+{
+  "data": {
+    "last_idle_single_mode_start_info": {
+      "continue_setting": {
+        "continue_flag": false,
+        "not_continue_flag_below_g2": false,
+        "not_continue_flag_unsuitable_race": false
+      },
+      "priority_skill_array": [
+        {
+          "priority": 1,
+          "skill_id": 200361
+        }
+      ],
+      "training_policy_ground_type": 1,
+      "training_policy_param_rate_set_id": 1
+    },
+    "reserved_race_info": {
+      "default_deck_num": 0,
+      "needs_default_confirm": 1,
+      "reserved_race_array": [
+        {
+          "deck_name": "",
+          "deck_num": 1,
+          "race_array": []
+        },
+        {
+          "deck_name": "",
+          "deck_num": 2,
+          "race_array": []
+        },
+        {
+          "deck_name": "",
+          "deck_num": 3,
+          "race_array": []
+        },
+        {
+          "deck_name": "",
+          "deck_num": 4,
+          "race_array": []
+        },
+        {
+          "deck_name": "",
+          "deck_num": 5,
+          "race_array": []
+        },
+        {
+          "deck_name": "",
+          "deck_num": 6,
+          "race_array": []
+        },
+        {
+          "deck_name": "",
+          "deck_num": 7,
+          "race_array": []
+        },
+        {
+          "deck_name": "",
+          "deck_num": 8,
+          "race_array": []
+        }
+      ]
+    }
+  },
+  "data_headers": {
+    "notifications": {
+      "new_honor_data_array": [
+        {
+          "create_time": "2026-10-27 18:15:40",
+          "honor_id": 515101
+        },
+        {
+          "create_time": "2026-10-27 18:16:36",
+          "honor_id": 515102
+        },
+        {
+          "create_time": "2026-10-27 02:15:07",
+          "honor_id": 720015
+        }
+      ],
+      "room_match_race_result_num": 0,
+      "unread_information_exists": 1
+    },
+    "result_code": 1,
+    "servertime": 1793176709,
+    "sid": "e0ff6a296b6bb11945999a5cbc4beb149aa17f5b82",
+    "viewer_id": 601653962
+  },
+  "response_code": 1
+}
