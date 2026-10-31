@@ -200,6 +200,10 @@ unsafe fn set_go_active(go: *mut Il2CppObject, active: bool) {
 static TAG_OBJECTS: once_cell::sync::Lazy<std::sync::Mutex<Vec<usize>>> = once_cell::sync::Lazy::new(|| std::sync::Mutex::new(Vec::new()));
 
 fn suppress_tag_objects() {
+    // 关掉「机器学习」后不再压制这些对象
+    if !Hachimi::instance().config.load().cutin_block_ui_events {
+        return;
+    }
     let Ok(mut v) = TAG_OBJECTS.lock() else { return; };
     if v.is_empty() { return; }
     v.retain(|&p| {
@@ -219,6 +223,10 @@ fn is_tag_prefab(s: &str) -> bool {
 
 unsafe fn hide_cloned_tag(prefab: *mut Il2CppObject, cloned: *mut Il2CppObject) {
     if prefab.is_null() || cloned.is_null() { return; }
+    // 关掉「机器学习」后不再隐藏抽卡横幅（星级 + 角色名）
+    if !Hachimi::instance().config.load().cutin_block_ui_events {
+        return;
+    }
     let k = *(prefab as *const *mut Il2CppClass);
     if k.is_null() { return; }
     let mn = crate::il2cpp::api::il2cpp_class_get_method_from_name(k, c"get_name".as_ptr(), 0);
@@ -282,6 +290,10 @@ fn append_shadow_frame(id: i32) {
 
 fn observe_shadow_frame(id: i32) {
     if id <= 0 { return; }
+    // 总开关关闭时也不再学习（否则名单会一直累积，重开时拦一堆没预期的帧）
+    if !Hachimi::instance().config.load().cutin_block_ui_events {
+        return;
+    }
     let now = now_ms();
     let mut detect = false;
     if let Ok(mut m) = SHADOW_TRACK.lock() {
@@ -688,12 +700,52 @@ fn cls_opt(umamusume: *const Il2CppImage, name: &str) -> Option<*mut Il2CppClass
 // GallopUtil.GotoTitleOnError(string)
 type GotoTitleOnErrorFn = extern "C" fn(text: *mut Il2CppString) -> ();
 static GOTO_ERR_LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-extern "C" fn GotoTitleOnError_hook(text: *mut Il2CppString) {
-    if Hachimi::instance().config.load().intercept_error_dialog {
-        if !GOTO_ERR_LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-            let msg = unsafe { read_il2cpp_string(text) };
-            warn!("[cutin] intercepted GotoTitleOnError: {}", msg);
+
+/// 打全量调用栈，定位 GotoTitleOnError 的调用者。
+/// 用户要求：全量帧，不限层。
+fn goto_err_stack() -> String {
+    const MAX: usize = 62;
+    #[link(name = "ntdll")]
+    extern "system" {
+        fn RtlCaptureStackBackTrace(
+            skip: u32, count: u32,
+            frames: *mut *mut std::ffi::c_void, hash: *mut u32,
+        ) -> u16;
+    }
+    let mut frames = [std::ptr::null_mut(); MAX];
+    let n = unsafe {
+        RtlCaptureStackBackTrace(0, MAX as u32, frames.as_mut_ptr(), std::ptr::null_mut())
+    } as usize;
+
+    // GameAssembly 基址
+    let base = unsafe {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn GetModuleHandleW(name: *const u16) -> *mut std::ffi::c_void;
         }
+        let w: Vec<u16> = "GameAssembly.dll\0".encode_utf16().collect();
+        GetModuleHandleW(w.as_ptr()) as usize
+    };
+
+    let mut out = String::from("     调用栈（全量）:");
+    for (i, f) in frames[..n].iter().enumerate() {
+        let a = *f as usize;
+        if a == 0 { continue; }
+        if base != 0 && a >= base {
+            out.push_str(&format!("\n      #{:<2} GameAssembly+0x{:X}", i, a - base));
+        } else {
+            out.push_str(&format!("\n      #{:<2} {:#x}", i, a));
+        }
+    }
+    out
+}
+
+extern "C" fn GotoTitleOnError_hook(text: *mut Il2CppString) {
+    let msg = unsafe { read_il2cpp_string(text) };
+    if !GOTO_ERR_LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        warn!("[cutin] GotoTitleOnError 被调用，text={:?}\n{}", msg, goto_err_stack());
+    }
+    if Hachimi::instance().config.load().intercept_error_dialog {
         return;
     }
     get_orig_fn!(GotoTitleOnError_hook, GotoTitleOnErrorFn)(text)

@@ -40,6 +40,30 @@ extern "C" fn GetSingCharaIdList(songId: i32, songPartNumber: i32, allCharaIdArr
                         *data_ptr.add(i) = new_id;
                     }
                 }
+
+                // 探针：打印该数组最终内容 + 重复检测
+                if std::env::var("HACHIMI_SONG_PROBE").ok().as_deref() != Some("0") {
+                    let tag = if std::ptr::eq(array, vocalCharaIdArray) { "vocal" } else { "all" };
+                    let mut vals = Vec::with_capacity(len);
+                    for i in 0..len {
+                        vals.push(*data_ptr.add(i));
+                    }
+                    info!("[sing] song={} {} = {:?}", songId, tag, vals);
+                    let mut seen = std::collections::HashMap::new();
+                    let mut dup = 0;
+                    for (i, v) in vals.iter().enumerate() {
+                        if *v <= 0 {
+                            continue;
+                        }
+                        if let Some(prev) = seen.insert(*v, i) {
+                            dup += 1;
+                            warn!("[sing]   ★ 槽位 {} 与 {} 同为角色 {}（第 {} 次重复）", prev, i, v, dup);
+                        }
+                    }
+                    if dup > 0 {
+                        warn!("[sing]   ★ 共 {} 个重复槽位 → 多声部同角色，极易无声", dup);
+                    }
+                }
             }
         }
     }

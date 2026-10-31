@@ -634,7 +634,11 @@ struct RaceStatHud {
     chip_text: String,
     clones: Vec<RaceStatHud>,
     clone_seq: u32,
-    spawn_clone: bool
+    spawn_clone: bool,
+    // ===== 比赛作弊 =====
+    cheat_lock_speed: bool,
+    cheat_lock_hp: bool,
+    cheat_teleport: bool,
 }
 
 impl RaceStatHud {
@@ -664,7 +668,10 @@ impl RaceStatHud {
             chip_text: String::new(),
             clones: Vec::new(),
             clone_seq: 0,
-            spawn_clone: false
+            spawn_clone: false,
+            cheat_lock_speed: false,
+            cheat_lock_hp: false,
+            cheat_teleport: false,
         }
     }
 
@@ -698,7 +705,10 @@ impl RaceStatHud {
             chip_text: String::new(),
             clones: Vec::new(),
             clone_seq: seq,
-            spawn_clone: false
+            spawn_clone: false,
+            cheat_lock_speed: false,
+            cheat_lock_hp: false,
+            cheat_teleport: false,
         }
     }
 
@@ -883,6 +893,7 @@ impl RaceStatHud {
         } else {
             (Vec::new(), None)
         };
+        hud.apply_cheats();
 
         if hud.clones.is_empty() && hud.config.race_stat_hud_persist_clones {
             let entries: Vec<hachimi::RaceStatHudCloneConfig> = hud.config.race_stat_hud_clones.iter().copied().collect();
@@ -1812,6 +1823,15 @@ impl RaceStatHud {
                 Self::value_chip(ui, &self.chip_text, VALUE_CHIP_HUE_FINISH, scale);
             });
         }
+
+        // ===== 比赛作弊开关（仅玩家自己的马）=====
+        ui.add_space(4.0 * scale);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(8.0 * scale, 2.0 * scale);
+            ui.checkbox(&mut self.cheat_lock_speed, "锁速");
+            ui.checkbox(&mut self.cheat_lock_hp, "锁血");
+            ui.checkbox(&mut self.cheat_teleport, "瞬移");
+        });
     }
 
     fn distance_bar(ui: &mut egui::Ui, stats: &CharacterStats, course: &RaceCourseInfo, scale: f32) {
@@ -2107,6 +2127,46 @@ impl RaceStatHud {
                     .or_else(|| to_s(MasterDataUtil::GetSkillName(skill_id)))
                     .unwrap_or_else(|| format!("Skill {}", skill_id))
             })
+    }
+
+    /// 比赛作弊：每帧改写客户端内存里的马匹状态。
+    fn apply_cheats(&mut self) {
+        use crate::il2cpp::hook::umamusume::{HorseRaceInfo, RaceInfo, RaceManager};
+
+        if !(self.cheat_lock_speed || self.cheat_lock_hp || self.cheat_teleport) {
+            return;
+        }
+        let race_manager = RaceManager::instance();
+        if race_manager.is_null() {
+            return;
+        }
+        let horse_manager = RaceManager::get__horseManager(race_manager);
+        if horse_manager.is_null() {
+            return;
+        }
+        let Some(info) = HorseRaceInfo::player_horse_info(horse_manager) else {
+            return;
+        };
+
+        if self.cheat_lock_speed {
+            HorseRaceInfo::set__lastSpeed(info, 30.0);
+            HorseRaceInfo::set__minSpeed(info, 30.0);
+            HorseRaceInfo::set__maxSpeedInRace(info, 30.0);
+        }
+        if self.cheat_lock_hp {
+            HorseRaceInfo::set__hp(info, 9999.0);
+            HorseRaceInfo::set__maxHp(info, 9999.0);
+        }
+        if self.cheat_teleport {
+            let race_info = RaceManager::get_RaceInfo();
+            if !race_info.is_null() {
+                let course = RaceInfo::get_CourseOnlyDistance(race_info) as f32
+                    + RaceInfo::get_RunUpDistance(race_info) as f32;
+                if course > 3.0 {
+                    HorseRaceInfo::set__distance(info, course - 2.0);
+                }
+            }
+        }
     }
 
     fn collect_stats(&mut self) -> (Vec<CharacterStats>, Option<RaceCourseInfo>) {
@@ -6927,6 +6987,18 @@ impl ConfigEditor {
 
                 ui.label(t!("config_editor.char_replace_cutscene"));
                 ui.checkbox(&mut cfg.replace_in_cutscene, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.char_replace_cutscene_model"));
+                ui.checkbox(&mut cfg.replace_model_in_cutscene, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.char_replace_motion"));
+                ui.checkbox(&mut cfg.replace_motion, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.char_replace_in_race"));
+                ui.checkbox(&mut cfg.replace_in_race, "");
                 ui.end_row();
             });
         ui.add_space(6.0);

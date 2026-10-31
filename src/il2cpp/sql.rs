@@ -1197,6 +1197,27 @@ fn get_single_column_int(sql: &str) -> Vec<i32> {
     items
 }
 
+/// 读第一行的前 n 列（int）。
+/// 用于 chara_data 这种一次要拿多个字段的表。
+fn get_first_row_ints(sql: &str, n: usize) -> Vec<i32> {
+    let mut out = Vec::with_capacity(n);
+    let db_path = get_masterdb_path();
+    let conn = Connection::new();
+    if Connection::Open(conn, db_path.to_il2cpp_string(), std::ptr::null_mut(), std::ptr::null_mut(), 0) {
+        let query = Connection::Query(conn, sql.to_il2cpp_string());
+        if !query.is_null() {
+            if Query::Step(query) {
+                for i in 0..n {
+                    out.push(Query::GetInt(query, i as i32));
+                }
+            }
+            Query::Dispose(query);
+        }
+        Connection::CloseDB(conn);
+    }
+    out
+}
+
 /// 查 chara_type 表：角色在某个场景/切分下的动作 type 号。
 /// 动作资源按 type 分包（3d/motion/{用途}/body/type{NN}），目标角色缺原角色
 /// 那几档 type 时装配会卡住，所以替换后要按目标角色自己的 type 走。
@@ -1206,6 +1227,25 @@ pub fn get_chara_motion_type(chara_id: i32, scene: i32, cut: i32) -> Option<i32>
         chara_id, scene, cut
     );
     get_single_column_int(&sql).first().copied()
+}
+
+/// 取角色的体型参数：(height, bust, skin, socks, scale, shape)
+///
+/// 这些字段决定模型的身体比例、胸围、肤色、袜子类型。
+/// 替换角色时如果不同步，就会出现「角色 ID 换了但身体还是原来那个人的比例」——
+/// 表现为模型明显不对/穿模。实测 1002 (height=1, skin=1, socks=6)
+/// vs 9047 (height=2, bust=2) 差异明显。
+pub fn get_chara_body_shape(chara_id: i32) -> Option<(i32, i32, i32, i32, i32, i32)> {
+    let sql = format!(
+        "SELECT height, bust, skin, socks, scale, shape FROM chara_data WHERE id={} LIMIT 1",
+        chara_id
+    );
+    let cols = get_first_row_ints(&sql, 6);
+    if cols.len() >= 6 {
+        Some((cols[0], cols[1], cols[2], cols[3], cols[4], cols[5]))
+    } else {
+        None
+    }
 }
 
 pub fn get_all_chara_ids() -> Vec<i32> {
@@ -1341,7 +1381,15 @@ fn load_chara_last_year() -> FnvHashMap<i32, i32> {
     let conn = Connection::new();
 
     if Connection::Open(conn, db_path.to_il2cpp_string(), ptr::null_mut(), ptr::null_mut(), 0) {
-        let query = Connection::Query(conn, "SELECT id, last_year FROM chara_data".to_il2cpp_string());
+        // ★ 排除「尚未实装」的角色：它们的 start_date 是 2050 占位时间戳（2524575600），
+        //   但 last_year 可能是正常年份（如 1075/1101/1126/1128/1138/1139/1140/
+        //   1142/1146/1148/2004 这 11 个），只看 last_year 会误判成可用。
+        //   这些角色没有图标资源，替换过去会让按钮静默失效。
+        let query = Connection::Query(
+            conn,
+            "SELECT id, last_year FROM chara_data WHERE start_date < 2524575600"
+                .to_il2cpp_string(),
+        );
         if !query.is_null() {
             while Query::Step(query) {
                 items.insert(Query::GetInt(query, 0), Query::GetInt(query, 1));
@@ -1369,11 +1417,33 @@ pub fn preload_chara_data() -> bool {
 }
 
 pub fn is_playable_chara(chara_id: i32) -> bool {
-    let cache = CHARA_LAST_YEAR_CACHE.read().unwrap();
-    match cache.as_ref() {
-        Some(items) => items.get(&chara_id).map(|last_year| *last_year != 1800).unwrap_or(false),
-        None => false,
-    }
+    // ★ 纯静态判定，不查数据库。
+    //
+    //   之前试过两次运行时查表，都有问题：
+    //     1. 只读缓存 → 缓存由 `chara_table_ready()` 在主线程异步填充，
+    //        但资源层（`remap_cutscene_char_asset`）从不调它，缓存永远是 None，
+    //        所有角色都被判成不可用，替换全失效。
+    //     2. 改成懒加载同步查表 → 在资源加载线程里调 il2cpp 的 SQLite 封装，
+    //        直接卡死在 `get_masterdb_path`，游戏卡角色加载。
+    //
+    //   现在硬编码可用区间（从 master.mdb 导出，174 个角色里 135 个可用）：
+    //     所有 2000 段和 9000 段（NPC / 未实装）的 `start_date` 都是
+    //     2050 占位时间戳，一律没有图标和 petit 资源。
+    //
+    //   区间来源：`SELECT id FROM chara_data WHERE start_date < 2524575600`。
+    //   游戏更新后这里可能过时，但失效方向是「回落原资源」，安全。
+    matches!(
+        chara_id,
+        1001..=1074
+            | 1076..=1100
+            | 1102..=1121
+            | 1124
+            | 1127
+            | 1129..=1137
+            | 1141
+            | 1143..=1145
+            | 1149
+    )
 }
 
 pub fn get_dress_sort_rows() -> Vec<(i32, i32, i32, i32)> {

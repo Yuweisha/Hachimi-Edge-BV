@@ -4,3 +4,20 @@
 /plugins
 dump.cs
 .envrc
+
+# 构建/打包产物
+/dist_editor
+/dist_uma
+/dist_uma_lto
+__pycache__/
+*.pyc
+
+# 反编译产物（体积大，不入库）
+/docs/*.dll
+/docs/*.bin
+/docs/*.json.bak
+/docs/GameAssembly*
+
+# 本地日志/临时
+/*.log
+*.bak_*

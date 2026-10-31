@@ -367,6 +367,23 @@ extern "C" fn AddSongCueSheet(this: *mut Il2CppObject, music_id: i32,
     };
 
     let (replaced, changed) = replaced_song_sheets(&names);
+
+    // 探针：打印每个声部槽位的 cue 名（原始 vs 替换后），定位「同角色多声部无声」
+    if std::env::var("HACHIMI_SONG_PROBE").ok().as_deref() != Some("0") {
+        info!("[song] AddSongCueSheet music_id={} 槽位数={}", music_id, names.len());
+        for (i, (o, r)) in names.iter().zip(replaced.iter()).enumerate() {
+            let flag = if o != r { " → " } else { "    " };
+            info!("[song]   [{}] {}{}{}", i, o, flag, if o != r { r.as_str() } else { "" });
+        }
+        // 替换后是否有重复
+        let mut seen = std::collections::HashMap::new();
+        for (i, r) in replaced.iter().enumerate() {
+            if let Some(prev) = seen.insert(r.clone(), i) {
+                warn!("[song]   ★ 槽位 {} 与 {} 的 cue 名重复: {}", prev, i, r);
+            }
+        }
+    }
+
     if changed == 0 {
         return orig(this, music_id, sheets);
     }
@@ -406,19 +423,35 @@ fn replaced_song_sheets(names: &[String]) -> (Vec<String>, usize) {
     let mut changed = 0;
 
     for name in names {
+        // ★ Live 歌声必须走 resolve_target_sheet：
+        //   它会检查替换后的 cue sheet 是否存在（cue_available / load_cue_sheet），
+        //   不存在时回退同角色其他变体（_01 → _02..09），都不行才返回 None（保留原 cue）。
+        //   之前用 rewrite_cue_sheet_name（无任何检查）—— 替换目标缺该声部变体时，
+        //   CriWare 不播也不报错，表现就是「ABCD 四个声部只有 A 有声，其余静音」。
         let target = if force != 0 {
             match crate::core::voice_replace::chara_id_in(name) {
                 Some((chara_id, range)) if chara_id != force => {
-                    let mut new_name = name.clone();
-                    new_name.replace_range(range, &format!("{:04}", force));
-                    Some(new_name)
+                    crate::core::voice_replace::resolve_target_sheet(name, range, force)
                 }
                 _ => None,
             }
         } else {
-            crate::core::voice_replace::rewrite_cue_sheet_name(name)
+            match crate::core::voice_replace::chara_id_in(name) {
+                Some((chara_id, range)) => {
+                    let new_char = crate::core::voice_replace::effective_char_id(chara_id);
+                    if new_char != chara_id {
+                        crate::core::voice_replace::resolve_target_sheet(name, range, new_char)
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            }
         };
 
+        // ★ 不要改变体号！
+        //   变体 _00/_01 对应声部 0/1，不同演唱位置映射不同声部，是游戏设计的一部分。
+        //   把重复位置收拢到 _00 会让和声全部变成主唱、丢失声部分层，是错的。
         match target {
             Some(target) => {
                 replaced.push(target);
