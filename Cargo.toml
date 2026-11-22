@@ -1,6 +1,6 @@
 [package]
 name = "hachimi"
-version = "v.1.4.3.0-bv"
+version = "1.4.3"
 edition = "2021"
 
 [lib]
