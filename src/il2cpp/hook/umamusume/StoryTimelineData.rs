@@ -314,14 +314,6 @@ fn replace_story_chara_tracks(this: *mut Il2CppObject, base_path: &str) {
         return;
     }
 
-    // 互斥：replace_model_in_cutscene = true 时走「外观重映射」模式 ——
-    // 不改轨道数据（游戏数据层仍是原角色），只在 LoadAssetHandle 里替换资源路径，
-    // 模型/服装/贴图/动作整套跟着换，轨道的表情/口型/演出保持原样。
-    if char_replace.replace_model_in_cutscene {
-        debug!("[story] 外观重映射模式，跳过轨道替换: {}", base_path);
-        return;
-    }
-
     // 80 段 = 支援卡随机事件（如「成长的灵感」）。这类事件的过场替换会让游戏
     // 卡在加载阶段（资源齐全但装配流程不推进），整段跳过替换。
     if SKIP_CUTSCENE_REPLACE.load(Ordering::Acquire) {

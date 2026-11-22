@@ -3,6 +3,7 @@ pub mod TextId;
 pub mod StoryRaceTextAsset;
 mod LyricsController;
 pub mod StoryTimelineData;
+pub mod StoryMotionPath;
 #[cfg(target_os = "windows")]
 pub mod ErrorSkip;
 pub mod LiveUnlock;
@@ -71,6 +72,7 @@ mod LiveTheaterCharaSelect;
 mod LiveTheaterViewController;
 mod LiveTheaterUnlock;
 mod CharacterNoteUnlock;
+pub mod GachaBannerSuppress;
 pub mod MovieProbe;
 pub mod CySpringController;
 mod LiveUtil;
@@ -107,12 +109,9 @@ mod LiveTimelineKeyCameraLookAtData;
 #[cfg(target_os = "windows")]
 mod LiveTimelineKeyMultiCameraPositionData;
 mod CharacterBuildInfo;
-pub mod CharBuildPathProbe;
-pub mod SwapMotionProbe;
 pub mod ModelLoaderProbe;
-pub mod HeadBoneMerge;
+pub mod AssetCheck;
 pub mod MotionReplace;
-pub mod ClothPathReplace;
 pub mod AssetCleanupGuard;
 #[cfg(target_os = "windows")]
 mod CharacterObject;
@@ -150,7 +149,6 @@ pub mod RaceSimulateReader;
 pub mod RaceHorseManagerReplay;
 pub mod RaceSimulateFrameData;
 pub mod RaceSimulateHorseFrameData;
-pub mod RaceLoadProbe;
 
 #[path = "SimulateEventType.rs"]
 mod simulate_event_type;
@@ -218,6 +216,7 @@ pub fn init() {
     StoryRaceTextAsset::init(image);
     LyricsController::init(image);
     StoryTimelineData::init(image);
+    StoryMotionPath::init(image);
     StoryTimelineBlockData::init(image);
     StoryTimelineTrackData::init(image);
     StoryTimelineTextClipData::init(image);
@@ -269,6 +268,7 @@ pub fn init() {
     LiveTheaterViewController::init(image);
     LiveTheaterUnlock::init(image);
                     CharacterNoteUnlock::init(image);
+    GachaBannerSuppress::init(image);
     MovieProbe::init(image);
     CySpringController::init(image);
     LiveUtil::init(image);
@@ -286,12 +286,9 @@ pub fn init() {
     LowResolutionCamera::init(image);
     TapEffectController::init(image);
     CharacterBuildInfo::init(image);
-    CharBuildPathProbe::init(image);   // 资源路径探针
-    SwapMotionProbe::init(image);      // 套动作探针
     ModelLoaderProbe::init(image);     // 模型组装 API 探针
-    HeadBoneMerge::init(image);        // 头部骨骼合并
+    AssetCheck::init(image);
     MotionReplace::init(image);       // 套动作替换
-    ClothPathReplace::init(image);    // 套服装（Hook 模式）
     // AssetCleanupGuard::init(image);   // 已改为独立插件 assetcleanupguard.dll
 
     #[cfg(target_os = "windows")]
@@ -339,7 +336,6 @@ pub fn init() {
     RaceUIMiniMap::init(image);
     RaceViewReplay::init(image);
     RaceHorseManagerBase::init(image);
-    // RaceLoadProbe::init(image);   // 比赛加载探针 —— 已关闭（验证是否探针破坏加载）
     RaceSimulateData::init(image);
     RaceSimulateEventData::init(image);
     RaceSimulateReader::init(image);

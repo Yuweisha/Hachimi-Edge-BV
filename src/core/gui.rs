@@ -5283,18 +5283,16 @@ enum ConfigEditorTab {
     General,
     Graphics,
     Gameplay,
-    CharReplace,
-    Experimental
+    CharReplace
 }
 
 impl ConfigEditorTab {
-    fn display_list() -> [(ConfigEditorTab, Cow<'static, str>); 5] {
+    fn display_list() -> [(ConfigEditorTab, Cow<'static, str>); 4] {
         [
             (ConfigEditorTab::General, t!("config_editor.general_tab")),
             (ConfigEditorTab::Graphics, t!("config_editor.graphics_tab")),
             (ConfigEditorTab::Gameplay, t!("config_editor.gameplay_tab")),
-            (ConfigEditorTab::CharReplace, t!("config_editor.char_replace_tab")),
-            (ConfigEditorTab::Experimental, t!("config_editor.experimental_tab"))
+            (ConfigEditorTab::CharReplace, t!("config_editor.char_replace_tab"))
         ]
     }
 
@@ -5303,8 +5301,7 @@ impl ConfigEditorTab {
             ConfigEditorTab::General => ConfigEditorTab::Graphics,
             ConfigEditorTab::Graphics => ConfigEditorTab::Gameplay,
             ConfigEditorTab::Gameplay => ConfigEditorTab::CharReplace,
-            ConfigEditorTab::CharReplace => ConfigEditorTab::Experimental,
-            ConfigEditorTab::Experimental => ConfigEditorTab::General,
+            ConfigEditorTab::CharReplace => ConfigEditorTab::General,
         }
     }
 
@@ -5314,7 +5311,6 @@ impl ConfigEditorTab {
             ConfigEditorTab::Graphics => ConfigEditorTab::General,
             ConfigEditorTab::Gameplay => ConfigEditorTab::Graphics,
             ConfigEditorTab::CharReplace => ConfigEditorTab::Gameplay,
-            ConfigEditorTab::Experimental => ConfigEditorTab::CharReplace,
         }
     }
 
@@ -5324,7 +5320,6 @@ impl ConfigEditorTab {
             ConfigEditorTab::Graphics => 1,
             ConfigEditorTab::Gameplay => 2,
             ConfigEditorTab::CharReplace => 3,
-            ConfigEditorTab::Experimental => 4,
         }
     }
 
@@ -5334,7 +5329,6 @@ impl ConfigEditorTab {
             ConfigEditorTab::Graphics => "body_scroll_graphics",
             ConfigEditorTab::Gameplay => "body_scroll_gameplay",
             ConfigEditorTab::CharReplace => "body_scroll_char_replace",
-            ConfigEditorTab::Experimental => "body_scroll_experimental",
         }
     }
 }
@@ -6902,48 +6896,6 @@ impl ConfigEditor {
     }
 
     /// 「实验性功能(崩溃风险)」页：所有实验性开关集中在这里，两列布局。
-    fn experimental_page(&self, ui: &mut egui::Ui, config: &mut hachimi::Config, scale: f32) {
-        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-
-        let label_w = ui.available_width() * 0.62;
-        let column_spacing = 8.0 * scale;
-        let avail = ui.available_width();
-        let widget_col = (avail - label_w - column_spacing).max(60.0);
-        ui.spacing_mut().slider_width = (widget_col - 64.0 * scale).max(60.0);
-
-        egui::Grid::new(self.id.with("experimental_grid"))
-            .striped(true)
-            .num_columns(2)
-            .spacing([column_spacing, 4.0 * scale])
-            .min_col_width(label_w)
-            .show(ui, |ui| {
-                ui.label(t!("config_editor.cutin_fov_scale"));
-                ui.add(egui::Slider::new(&mut config.cutin_fov_scale, 0.5..=3.0).step_by(0.05));
-                ui.end_row();
-
-                ui.label(t!("config_editor.cutin_progress_slider"));
-                ui.checkbox(&mut config.cutin_progress_slider, "");
-                ui.end_row();
-
-                ui.label(t!("config_editor.cutin_block_ui_events"));
-                ui.checkbox(&mut config.cutin_block_ui_events, "");
-                ui.end_row();
-
-                ui.label(t!("config_editor.cutin_first_person"));
-                ui.checkbox(&mut config.cutin_first_person, "");
-                ui.end_row();
-
-                ui.label(t!("config_editor.cutin_free_camera"));
-                ui.checkbox(&mut config.cutin_free_camera, "");
-                ui.end_row();
-
-                ui.label(t!("config_editor.intercept_error_dialog"));
-                ui.checkbox(&mut config.intercept_error_dialog, "");
-                ui.end_row();
-
-            });
-    }
-
     fn char_replace_page(&self, ui: &mut egui::Ui, config: &mut hachimi::Config, scale: f32) {
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
         let search = self.search_term.clone();
@@ -6989,16 +6941,16 @@ impl ConfigEditor {
                 ui.checkbox(&mut cfg.replace_in_cutscene, "");
                 ui.end_row();
 
-                ui.label(t!("config_editor.char_replace_cutscene_model"));
-                ui.checkbox(&mut cfg.replace_model_in_cutscene, "");
-                ui.end_row();
-
                 ui.label(t!("config_editor.char_replace_motion"));
                 ui.checkbox(&mut cfg.replace_motion, "");
                 ui.end_row();
 
                 ui.label(t!("config_editor.char_replace_in_race"));
                 ui.checkbox(&mut cfg.replace_in_race, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.char_replace_keep_motion"));
+                ui.checkbox(&mut cfg.keep_original_motion, "");
                 ui.end_row();
             });
         ui.add_space(6.0);
@@ -7059,12 +7011,18 @@ impl ConfigEditor {
                     &dress_items,
                     &mut self.char_replace_search.lock().unwrap()
                 );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button(t!("config_editor.char_replace_delete")).clicked() {
-                        remove_index = Some(index);
-                    }
-                    ui.checkbox(&mut entry.replace_mini, t!("config_editor.char_replace_mini"));
-                });
+            });
+
+            // 「替换迷你角色 / 删除配置」单独一行、左对齐。
+            //
+            // 右对齐版本实测仍然看不见：本页外层给 ui 设过 set_width(available_width)，
+            // 右对齐布局用的可用宽度与真实可视区不一致，控件会被排到可视区右侧之外。
+            // 左对齐不依赖可用宽度的计算，必然可见。
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut entry.replace_mini, t!("config_editor.char_replace_mini"));
+                if ui.button(t!("config_editor.char_replace_delete")).clicked() {
+                    remove_index = Some(index);
+                }
             });
             ui.add_space(4.0 * scale);
         }
@@ -7077,6 +7035,49 @@ impl ConfigEditor {
         if ui.button(t!("config_editor.char_replace_add")).clicked() {
             cfg.data.push(hachimi::GlobalCharReplaceEntry::default());
         }
+
+        // ── 特写（CutIn）相关：原「实验性功能」页，已并入本页
+        ui.add_space(6.0);
+        ui.separator();
+        ui.add_space(6.0);
+        ui.label(t!("config_editor.cutin_section"));
+
+        let label_w = ui.available_width() * 0.62;
+        let column_spacing = 8.0 * scale;
+        let avail = ui.available_width();
+        let widget_col = (avail - label_w - column_spacing).max(60.0);
+        ui.spacing_mut().slider_width = (widget_col - 64.0 * scale).max(60.0);
+
+        egui::Grid::new(self.id.with("cutin_grid"))
+            .striped(true)
+            .num_columns(2)
+            .spacing([column_spacing, 4.0 * scale])
+            .min_col_width(label_w)
+            .show(ui, |ui| {
+                ui.label(t!("config_editor.cutin_fov_scale"));
+                ui.add(egui::Slider::new(&mut config.cutin_fov_scale, 0.5..=3.0).step_by(0.05));
+                ui.end_row();
+
+                ui.label(t!("config_editor.cutin_progress_slider"));
+                ui.checkbox(&mut config.cutin_progress_slider, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.cutin_block_ui_events"));
+                ui.checkbox(&mut config.cutin_block_ui_events, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.cutin_first_person"));
+                ui.checkbox(&mut config.cutin_first_person, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.cutin_free_camera"));
+                ui.checkbox(&mut config.cutin_free_camera, "");
+                ui.end_row();
+
+                ui.label(t!("config_editor.intercept_error_dialog"));
+                ui.checkbox(&mut config.intercept_error_dialog, "");
+                ui.end_row();
+            });
     }
 
     fn options_page(&self, ui: &mut egui::Ui, config: &mut hachimi::Config, tab: ConfigEditorTab, scale: f32, column_spacing: f32) {
@@ -7086,10 +7087,6 @@ impl ConfigEditor {
         .show(ui, |ui| {
             if tab == ConfigEditorTab::CharReplace {
                 self.char_replace_page(ui, config, scale);
-                return;
-            }
-            if tab == ConfigEditorTab::Experimental {
-                self.experimental_page(ui, config, scale);
                 return;
             }
             let label_w = ui.available_width() * 0.47;

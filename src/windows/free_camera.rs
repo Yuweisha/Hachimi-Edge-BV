@@ -1047,34 +1047,60 @@ pub fn set_race_active() {
 }
 
 
-/// 首次进入 cutin 自由视角时，把相机放到头部位置（否则会从世界原点开始）。
+/// cutin 会话的初始化标志：每次进入新的 cutin 都要重置，
+/// 否则第二次特写会从上一次停下的机位开始（`ensure_cutin_start` 早退）。
+static CUTIN_START_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// 首次进入本次 cutin 时，把相机摆到游戏当前位姿（否则会从世界原点开始）。
 pub fn ensure_cutin_start(pos: Vector3_t, rot: Quaternion_t) {
-    static INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if INIT.swap(true, Ordering::AcqRel) {
+    if CUTIN_START_READY.swap(true, Ordering::AcqRel) {
         return;
     }
     let mut state = STATE.lock().unwrap();
     state.camera_pos = Vec3::from(pos);
     let q = Quat::from_quaternion(rot);
     state.camera_rotation = Some(q);
-    // 关键：camera_look_at 默认为 (0,0,0)，会让移动方向始终指向世界原点（走弧线）。
-    // 用游戏相机的前方向铺一个 20 米远的目标点。
-    let fwd = q.rotate(Vec3::new(0.0, 0.0, -1.0));
-    state.camera_look_at = state.camera_pos + fwd * 20.0;
+
+    // ★ 必须同时把 yaw/pitch 从游戏相机的朝向反解出来。
+    //
+    //   只写 `camera_look_at` 是不够的：任何一次视角输入都会走
+    //   `update_look_from_angles()`，它用 `yaw/pitch` 重算 look_at。
+    //   yaw/pitch 停在默认 0 时，那个函数会把视线拉回世界 -Z，
+    //   于是 WASD 的「前」永远是 -Z，和你看到的朝向脱钩（表现为
+    //   WS 沿同一条固定路径来回走）。
+    //
+    //   update_look_from_angles 的正向是：
+    //     forward = (sin(yaw)cos(pitch), sin(pitch), -cos(yaw)cos(pitch))
+    //   反解即 pitch = asin(f.y)、yaw = atan2(f.x, -f.z)。
+    //
+    // ★ Unity 相机的本地前方是 **+Z**（`Transform.forward` 在单位旋转下就是 (0,0,1)），
+    //   这里必须用 +Z 取世界前向。用 -Z 得到的是相机「背后」的方向，
+    //   反解出的 pitch 会整体取反 —— 原本略微俯视的机位被当成仰视，
+    //   一按 W/S 就按错误的仰角重算视线，表现为相机越走越高、最后俯视地板。
+    let fwd = q.rotate(Vec3::new(0.0, 0.0, 1.0)).normalized();
+    let pitch = fwd.y.clamp(-1.0, 1.0).asin().to_degrees();
+    let yaw = fwd.x.atan2(-fwd.z).to_degrees();
+    state.yaw = yaw;
+    state.pitch = pitch;
+    // look_at 用统一的 LOOK_RADIUS，和 update_look_from_angles 保持一致，
+    // 否则平移时目标点距离变化会带来额外的视线摆动。
+    state.camera_look_at = state.camera_pos + fwd * LOOK_RADIUS;
     state.live_fov = state.live_fov.max(30.0);
 }
 
 
-/// cutin 自由视角没有独立的窗口开关，勾选该项时强制让 tick() 生效。
-pub fn force_enable_for_cutin() {
-    let hachimi = Hachimi::instance();
-    if hachimi.config.load().windows.free_camera.enabled {
+/// cutin 自由视角的驱动入口。
+///
+/// 旧实现 `force_enable_for_cutin` 会**把 `windows.free_camera.enabled` 写进配置**来让
+/// `tick()` 生效 —— 那等于永久打开全局自由相机：菜单里看不到它，行为却已经变了
+/// （Android 上「没开菜单也自己开」就是这个）。现在 cutin 只走 `cutin_free_camera`，
+/// 配置一概不动。
+pub fn tick_cutin() {
+    let config = Hachimi::instance().config.load();
+    if !config.cutin_free_camera {
         return;
     }
-    let mut config = hachimi.config.load().as_ref().clone();
-    config.windows.free_camera.enabled = true;
-    let _ = hachimi.config.store(std::sync::Arc::new(config));
-    warn!("[free_camera] force enabled for cutin");
+    tick();
 }
 
 pub fn begin_cutin_scene() {
@@ -1086,6 +1112,8 @@ pub fn begin_cutin_scene() {
     state.scene = CameraScene::CutIn;
     state.reset_with_config(&config.windows.free_camera);
     state.last_tick = Instant::now();
+    // 新一次特写：允许重新取初始机位
+    CUTIN_START_READY.store(false, Ordering::Release);
 }
 
 pub fn end_scene(scene: CameraScene) {
@@ -1720,7 +1748,11 @@ pub fn wants_windows_input_capture() -> bool {
 
 pub fn on_mouse_button(right_down: bool) {
     let cutin_free = Hachimi::instance().config.load().cutin_free_camera;
-    if !is_game_input_capture_active() && !cutin_free {
+    let in_cutin = STATE.lock().map(|s| s.scene == CameraScene::CutIn).unwrap_or(false);
+    if in_cutin && !cutin_free {
+        return;
+    }
+    if !in_cutin && !is_game_input_capture_active() && !cutin_free {
         return;
     }
 
@@ -1732,7 +1764,13 @@ pub fn on_mouse_button(right_down: bool) {
 pub fn on_mouse_move(x: i32, y: i32) {
     let config = Hachimi::instance().config.load();
     let cutin_free = config.cutin_free_camera;
-    if !config.windows.free_camera.enabled && !cutin_free {
+    // cutin 场景只认 `cutin_free_camera`；其它场景只认全局开关。
+    let in_cutin = STATE.lock().map(|s| s.scene == CameraScene::CutIn).unwrap_or(false);
+    if in_cutin {
+        if !cutin_free {
+            return;
+        }
+    } else if !config.windows.free_camera.enabled {
         return;
     }
 
@@ -1775,9 +1813,29 @@ pub fn tick() {
         state.reset_with_config(config);
     }
     state.last_enabled = config.enabled;
-    if !config.enabled && !Hachimi::instance().config.load().cutin_free_camera {
+
+    // 场景许可：
+    //   · cutin 只由 `cutin_free_camera` 控制（旧实现写 `windows.free_camera.enabled`，
+    //     等于偷偷打开全局自由相机 —— Android 上「没开菜单也自己开」就是这么来的）；
+    //   · 其它场景必须 `windows.free_camera.enabled`。
+    // 另外 cutin 结束（controller 不再刷新）要把 scene 归零，否则 Live/比赛的自由相机
+    // 会被残留的 CutIn 状态挡住。
+    if state.scene == CameraScene::CutIn {
+        drop(state);
+        if !crate::il2cpp::hook::umamusume::MovieProbe::cutin_active() {
+            end_scene(CameraScene::CutIn);
+            return;
+        }
+        state = STATE.lock().unwrap();
+        let cutin_free = Hachimi::instance().config.load().cutin_free_camera;
+        if !cutin_free {
+            state.last_tick = Instant::now();
+            return;
+        }
+    } else if !config.enabled {
         return;
     }
+
     if !matches!(state.scene, CameraScene::Live | CameraScene::Race | CameraScene::CutIn) {
         state.last_tick = Instant::now();
         return;
@@ -1909,13 +1967,22 @@ fn deadzone(value: f32, deadzone: f32) -> f32 {
 fn move_forward_locked(state: &mut FreeCameraState, amount: f32) {
     match state.mode {
         FreeCameraMode::Free => {
-            // cutin 用游戏相机基准的前方向；其它场景用 look_at 方向
             let mut d = (state.camera_look_at - state.camera_pos).normalized();
             if d.len() < 1e-5 {
                 d = Vec3::new(0.0, 0.0, -1.0);
             }
+            // CutIn 的前后是**水平**位移：只看 yaw，丢掉俯仰分量。
+            // 直接用归一化的视线方向时，视线只要有一点俯仰，前后移动就会连带
+            // 抬高/降低相机（表现为沿弧线走、WS 抬升下降）。特写里玩家要的是平移。
+            if state.scene == CameraScene::CutIn {
+                let flat = Vec3::new(d.x, 0.0, d.z);
+                if flat.len() > 1e-4 {
+                    d = flat.normalized();
+                }
+            }
             let f = d;
             state.camera_pos = state.camera_pos + f * amount;
+            // 位置与目标点同步平移：视线方向（含俯仰）保持不变。
             state.camera_look_at = state.camera_look_at + f * amount;
         },
         FreeCameraMode::SelfieStick => {

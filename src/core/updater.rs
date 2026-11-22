@@ -195,27 +195,41 @@ impl Updater {
     }
 }
 
-struct Version(u32, u32, u32);
+struct Version(u32, u32, u32, u32);
 
 impl Version {
     pub fn try_parse(version: &str) -> Option<Version> {
-        let slice = version.strip_prefix('v').unwrap_or(version);
+        let version = version.trim();
+        let version = version.strip_prefix('v').unwrap_or(version);
 
-        let mut parts = slice.split('.');
+        let core = version.split(['-', '+']).next()?;
+        let mut parts = core.split('.');
+
         let major = parts.next()?.parse::<u32>().ok()?;
         let minor = parts.next()?.parse::<u32>().ok()?;
         let patch = parts.next()?.parse::<u32>().ok()?;
+        let build = match parts.next() {
+            Some(part) => part.parse::<u32>().ok()?,
+            None => 0
+        };
 
-        if parts.next().is_none() {
-            Some(Version(major, minor, patch))
-        } else {
-            None
+        if parts.next().is_some() {
+            return None;
         }
+
+        Some(Version(major, minor, patch, build))
     }
 
-    pub fn to_int(&self) -> u32 {
-        (self.0 << 16) | (self.1 << 8) | self.2
+    pub fn to_int(&self) -> u64 {
+        ((self.0 as u64) << 48) | ((self.1 as u64) << 32) | ((self.2 as u64) << 16) | self.3 as u64
     }
+}
+
+fn version_numbers(version: &str) -> Vec<u32> {
+    version.split(|c: char| !c.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<u32>().ok())
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -231,11 +245,9 @@ impl Release {
         let local = Version::try_parse(env!("CARGO_PKG_VERSION"));
         let remote = Version::try_parse(&self.tag_name);
 
-        // fall back to naive checking if one of them can't be parsed
-        if local.is_none() || remote.is_none() {
-            self.tag_name != format!("v{}", env!("CARGO_PKG_VERSION"))
-        } else {
-            remote.unwrap().to_int() > local.unwrap().to_int()
+        match (local, remote) {
+            (Some(local), Some(remote)) => remote.to_int() > local.to_int(),
+            _ => version_numbers(&self.tag_name) != version_numbers(env!("CARGO_PKG_VERSION"))
         }
     }
 }

@@ -778,14 +778,6 @@ pub struct GlobalCharReplaceEntry {
     pub new_cloth_id: i32,
     #[serde(default, alias = "replaceMini")]
     pub replace_mini: bool,
-    /// 混搭：头部用哪个角色的模型（0 = 跟 new_char_id 一致）。
-    /// 非 0 时「身体用 new_char_id、头用这个角色」—— 游戏把头/尾/身体路径分开生成，
-    /// 所以只要在 GetCharacterHeadModelFilePath 里给它换入参就能实现。
-    #[serde(default, alias = "headCharId")]
-    pub head_char_id: i32,
-    /// 混搭：头部用哪套服装的头部资源（0 = 跟 new_cloth_id 一致）
-    #[serde(default, alias = "headClothId")]
-    pub head_cloth_id: i32,
 }
 
 impl Default for GlobalCharReplaceEntry {
@@ -795,8 +787,6 @@ impl Default for GlobalCharReplaceEntry {
             new_char_id: 0,
             new_cloth_id: 0,
             replace_mini: false,
-            head_char_id: 0,
-            head_cloth_id: 0,
         }
     }
 }
@@ -814,8 +804,6 @@ pub struct GlobalCharReplaceConfig {
     pub replace_in_cutscene: bool,
     #[serde(default = "Config::default_true")]
     pub auto_dress: bool,
-    #[serde(default)]
-    pub replace_model_in_cutscene: bool,
     /// 是否在比赛场景（ctrl=1）里替换角色。
     /// 默认 false —— 实测比赛里替换会让画面出现彩色横条/色块，且污染后续场景直到重开游戏。
     #[serde(default)]
@@ -846,7 +834,6 @@ impl Default for GlobalCharReplaceConfig {
             replace_in_race: false,
             replace_motion: true,
             keep_original_motion: false,
-            replace_model_in_cutscene: false,
             data: Vec::new(),
         }
     }

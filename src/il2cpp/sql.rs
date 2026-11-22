@@ -1248,6 +1248,30 @@ pub fn get_chara_body_shape(chara_id: i32) -> Option<(i32, i32, i32, i32, i32, i
     }
 }
 
+
+/// 角色拥有的第一张卡（`card_data.id`，没有则 0）。
+///
+/// 比赛结果演出按「当前使用的卡」加载 `res_crd{charaId}{cardNo}_001`：
+/// 数据层替换角色后仍沿用原卡号，目标角色多半没有那个卡号 → 演出死等。
+/// 把 `_cardId` 设成目标角色自己存在的卡，路径就一定有。
+static FIRST_CARD_CACHE: Lazy<RwLock<FnvHashMap<i32, i32>>> = Lazy::new(|| RwLock::new(FnvHashMap::default()));
+
+pub fn get_first_card_id(chara_id: i32) -> i32 {
+    if let Some(v) = FIRST_CARD_CACHE.read().unwrap().get(&chara_id) {
+        return *v;
+    }
+    let sql = format!(
+        "SELECT id FROM card_data WHERE chara_id={} ORDER BY id LIMIT 1",
+        chara_id
+    );
+    let cols = get_first_row_ints(&sql, 1);
+    let id = cols.first().copied().unwrap_or(0);
+    if id > 0 {
+        FIRST_CARD_CACHE.write().unwrap().insert(chara_id, id);
+    }
+    id
+}
+
 pub fn get_all_chara_ids() -> Vec<i32> {
     get_single_column_int("SELECT id FROM chara_data")
 }
@@ -1370,6 +1394,7 @@ pub fn get_dress_chara_id(dress_id: i32) -> i32 {
 pub fn get_dress_have_mini(dress_id: i32) -> bool {
     get_dress_info(dress_id).map(|info| info.have_mini).unwrap_or(false)
 }
+
 
 
 static CHARA_LAST_YEAR_CACHE: Lazy<RwLock<Option<FnvHashMap<i32, i32>>>> = Lazy::new(|| RwLock::new(None));

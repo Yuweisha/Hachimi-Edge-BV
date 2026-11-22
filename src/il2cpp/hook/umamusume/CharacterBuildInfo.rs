@@ -198,11 +198,9 @@ fn dress_table_ready() -> bool {
     false
 }
 
-/// 迷你角色（mini）专用的 dress ID 范围。
-///
-/// 实测日志里出现 dress 4 / 5 / 6 这类极小值，属于 mini 形态；
-/// 把它们和普通服装 ID（10 万以上）混用会让装配失败。
 /// 把目标角色的体型参数写进 CharacterBuildInfo。
+///
+/// 不同角色的 height/bust/skin/socks 不同，只换 chara_id 会让模型用原角色的比例。
 fn sync_body_shape(this: *mut Il2CppObject, chara_id: i32) {
     let Some((height, bust, skin, socks, _scale, _shape)) = sql::get_chara_body_shape(chara_id) else {
         return;
@@ -235,22 +233,6 @@ fn replace_char_controller(
     let char_replace = &config.replace_global_char;
 
     if !char_replace.enable {
-        return false;
-    }
-
-    // ★ Hook 模式（`replace_model_in_cutscene`）：数据层一律不动。
-    //
-    //   这个开关的语义是「只换外观资源，不改角色数据」：
-    //     - `_charaId` / `_dressId` / `_headModelSubId` 全部保持原值
-    //     - 轨道、动作、骨骼仍然按原角色走
-    //     - 只在 `AssetManager::remap_cutscene_char_asset` 里把
-    //       `bdy{orig}_` → `bdy{new}_`、`chr{orig}_` → `chr{new}_`
-    //
-    //   之前这里没判断这个开关，数据层照样改 `_charaId`，结果变成「真换人」：
-    //   动作、骨骼、轨道全跟着目标角色跑，资源层看到路径已是目标 ID 就无事可做
-    //   （日志里 `外观替换 0 条` 就是这个原因）。这也是「动作错位」的根因 ——
-    //   原角色的轨道数据配着目标角色的骨骼在播。
-    if char_replace.replace_model_in_cutscene {
         return false;
     }
 
@@ -370,21 +352,6 @@ fn replace_char_controller(
 pub static CURRENT_CONTROLLER_TYPE: std::sync::atomic::AtomicI32 =
     std::sync::atomic::AtomicI32::new(-1);
 
-/// 最近一次 Rebuild 替换后的目标角色 ID（0 = 没替换）。
-///
-/// 为什么需要：GetCharacterHeadModelFilePath / GetCharacterTailModelFilePath
-/// 是**静态方法**，入参 charaId 来自 Rebuild 的 ecx（r15d），不是 CharacterBuildInfo 的字段。
-/// 所以只在字段上改 _charaId 不会影响头/尾的资源路径 —— 会出现「新身体 + 旧头」的混装，
-/// 装配失败导致过场软死。把目标角色存在这里，供 CharBuildPathProbe 在路径函数里纠正。
-pub static CURRENT_TARGET_CHARA: std::sync::atomic::AtomicI32 =
-    std::sync::atomic::AtomicI32::new(0);
-
-/// 混搭时「头部用哪个角色」（0 = 跟身体一致）。
-/// 由 replace_char_controller 成功后按配置的 head_char_id 写入，
-/// CharBuildPathProbe 在 GetCharacterHeadModelFilePath 里用它覆盖入参。
-pub static CURRENT_HEAD_CHARA: std::sync::atomic::AtomicI32 =
-    std::sync::atomic::AtomicI32::new(0);
-
 /// 替换前的原 dress_id，供 `keep_original_motion` 使用
 pub static CURRENT_ORIG_DRESS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
@@ -417,30 +384,6 @@ extern "C" fn CharacterBuildInfo_Rebuild(this: *mut Il2CppObject) {
 
 
             let replaced = replace_char_controller(&mut chara_id, &mut dress_id, &mut head_model_sub_id, controller_type, false);
-            // 无论成功与否都写：失败时必须清零，否则残留上一次的目标角色，
-            // 会把这个不该替换的角色的头/尾路径也改掉。
-            CURRENT_TARGET_CHARA.store(if replaced { chara_id } else { 0 }, Ordering::Release);
-            // 混搭：查配置里这条替换有没有指定 head_char_id
-            CURRENT_HEAD_CHARA.store({
-                if !replaced {
-                    0
-                } else {
-                    let cfg = Hachimi::instance().config.load();
-                    let want = cfg.replace_global_char
-                        .data
-                        .iter()
-                        .find(|e| e.new_char_id == chara_id)
-                        .map(|e| e.head_char_id)
-                        .unwrap_or(0);
-                    // 校验：头部角色必须在 chara 表里存在，否则头部资源加载会失败
-                    if want > 0 && chara_table_ready() && !sql::is_playable_chara(want) {
-                        warn!("[replace] head_char_id={} 不是可用角色，忽略", want);
-                        0
-                    } else {
-                        want
-                    }
-                }
-            }, Ordering::Release);
             if replaced {
                 set_field_value(this, CHARA_ID_FIELD, &chara_id);
                 set_field_value(this, DRESS_ID_FIELD, &dress_id);
@@ -453,61 +396,10 @@ extern "C" fn CharacterBuildInfo_Rebuild(this: *mut Il2CppObject) {
                     set_field_value(this, USE_DRESS_DATA_HEAD_FIELD, &no);
                 }
 
-                // 动作资源按 type 分包（`anm_eve_chr{id}_{type}_*`），沿用原角色的 type
-                // 会去取目标角色没有的那几档 —— 拿不到 clip 就退回静止姿势，表现为「动作没套上去」。
-                //
-                // 之前只在 `EventTimeline`(ctrl=3) 里同步，但剧情常用 `Simple`(ctrl=12)，
-                // 那里 `_motionBodyModelSubId` 一直是原角色的值。
-                // 实测 chara_type (scene=0, cut=0)：1003 → 1，1114 → 4，差别明显。
-                //
-                // 改成所有场景都同步：先按当前 controller 对应的 scene 查，
-                // 查不到退回 scene=0 的默认值。
-                {
-                    let scene = match controller_type {
-                        3 => 3,   // EventTimeline
-                        4 => 4,   // Live
-                        5 => 5,   // LiveTheater
-                        6 => 6,   // HomeStand
-                        7 => 7,   // HomeTalk
-                        8 => 8,   // HomeWalk
-                        9 => 9,   // CutIn
-                        1 => 1,   // Race
-                        _ => 0,   // 其它（含 Simple/Mini）走默认
-                    };
-                    let orig_type: i32 = get_field_value(this, BODY_MODEL_SUB_ID_FIELD);
-                    let keep_motion = Hachimi::instance()
-                        .config
-                        .load()
-                        .replace_global_char
-                        .keep_original_motion;
-                    let found = if keep_motion {
-                        None
-                    } else {
-                        sql::get_chara_motion_type(chara_id, scene, 0)
-                            .or_else(|| sql::get_chara_motion_type(chara_id, 0, 0))
-                    };
-                    match found {
-                        Some(t) => {
-                            warn!(
-                                "[replace] motion type {} -> {} (chara {} scene {})",
-                                orig_type, t, chara_id, scene
-                            );
-                            if t != orig_type {
-                                set_field_value(this, BODY_MODEL_SUB_ID_FIELD, &t);
-                                if !MOTION_BODY_MODEL_SUB_ID_FIELD.is_null() {
-                                    set_field_value(this, MOTION_BODY_MODEL_SUB_ID_FIELD, &t);
-                                }
-                            }
-                        }
-                        None => {
-                            warn!(
-                                "[replace] motion type 查不到 (chara {} scene {} orig {})",
-                                chara_id, scene, orig_type
-                            );
-                        }
-                    }
-                }
-
+                // 动作 type 不做替换：剧情动作是按原角色制作的 clip，而 `chara_type` 是
+                // 目标角色的动作族；两者一起换会出现「clip 是 A 的、rig/type 是 B 的」，
+                // 表现为动作错位。动作要么整套跟原角色（现状），要么整套跟目标角色
+                // （目标缺专属 clip 时只能回退，见 MotionReplace / StoryMotionPath）。
                 // 体型参数同步：不同角色的 height/bust/skin/socks 不同，
                 // 只换 chara_id 会让模型用原角色的比例，看起来「变了个样子」。
                 sync_body_shape(this, chara_id);
@@ -526,8 +418,9 @@ extern "C" fn CharacterBuildInfo_Rebuild(this: *mut Il2CppObject) {
                     dress_id
                 };
                 set_field_value(this, MOTION_DRESS_ID_FIELD, &motion_dress);
-                let no_card_id = -1;
-                set_field_value(this, CARD_ID_FIELD, &no_card_id);
+                let card_id = sql::get_first_card_id(chara_id);
+                let card_id = if card_id > 0 { card_id } else { -1 };
+                set_field_value(this, CARD_ID_FIELD, &card_id);
             }
         }
     }
@@ -561,9 +454,6 @@ extern "C" fn GetRaceDressId(this: *mut Il2CppObject, _is_apply_dress_change: bo
 fn init_character_build_info(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, CharacterBuildInfo);
 
-    let CharacterBuildInfo_Rebuild_addr = get_method_addr(CharacterBuildInfo, c"Rebuild", 0);
-    new_hook!(CharacterBuildInfo_Rebuild_addr, CharacterBuildInfo_Rebuild);
-
     unsafe {
         CHARA_ID_FIELD = get_field_from_name(CharacterBuildInfo, c"_charaId");
         CARD_ID_FIELD = get_field_from_name(CharacterBuildInfo, c"_cardId");
@@ -580,6 +470,10 @@ fn init_character_build_info(umamusume: *const Il2CppImage) {
         SKIN_TYPE_FIELD = get_field_from_name(CharacterBuildInfo, c"_skinType");
         SOCKS_TYPE_FIELD = get_field_from_name(CharacterBuildInfo, c"_socksType");
     }
+
+    let CharacterBuildInfo_Rebuild_addr = get_method_addr(CharacterBuildInfo, c"Rebuild", 0);
+    new_hook!(CharacterBuildInfo_Rebuild_addr, CharacterBuildInfo_Rebuild);
+
 }
 
 fn init_work_single_mode_chara_data(umamusume: *const Il2CppImage) {

@@ -32,8 +32,6 @@ use crate::{
 };
 
 static ORIG_OUTGAME: AtomicUsize = AtomicUsize::new(0);
-static ORIG_BODY: AtomicUsize = AtomicUsize::new(0);
-static ORIG_FACIAL: AtomicUsize = AtomicUsize::new(0);
 static ORIG_RUNNING: AtomicUsize = AtomicUsize::new(0);
 static ORIG_GATEIN: AtomicUsize = AtomicUsize::new(0);
 static N_HIT: AtomicUsize = AtomicUsize::new(0);
@@ -58,6 +56,12 @@ fn rewrite_motion_path(path: &str) -> Option<String> {
         return None;
     }
 
+    // 保留原角色动作时这里不能再改：`_motionDressId` 已经是原 dress，
+    // 再把 clip 路径换成目标角色会和它打架（动作资源与 rig 不一致）。
+    if cr.keep_original_motion {
+        return None;
+    }
+
     // 找路径里的 chr{N}：以 "chr" 开头、后接至少 3 位数字
     let bytes = path.as_bytes();
     let mut i = 0;
@@ -77,6 +81,13 @@ fn rewrite_motion_path(path: &str) -> Option<String> {
                     {
                         let mut new_path = path.to_string();
                         new_path.replace_range(start..end, &format!("{:04}", entry.new_char_id));
+
+                        // 目标角色没有这条动作就不换：换过去只会让加载拿到 null，
+                        // 剧情演出会直接走 GotoTitleOnError（Error0003）。
+                        if super::AssetCheck::is_exist(&new_path) == Some(false) {
+                            return None;
+                        }
+
                         let n = N_HIT.fetch_add(1, Ordering::Relaxed);
                         if n < 30 {
                             info!("[motion] {} → {}", path, new_path);
@@ -109,24 +120,6 @@ extern "C" fn GetOutgameSwapMotionPath(
     this: *mut Il2CppObject, a1: *mut Il2CppObject, a2: i32, a3: i32, a4: i32,
 ) -> *mut Il2CppString {
     let orig: OutgameFn = unsafe { std::mem::transmute(ORIG_OUTGAME.load(Ordering::Relaxed)) };
-    post(orig(this, a1, a2, a3, a4))
-}
-
-// Body/Facial: this, arg1(ptr), arg2(i32), arg3(i32), arg4(ptr/i32), 第5个走栈
-type FiveFn = extern "C" fn(
-    *mut Il2CppObject, *mut Il2CppObject, i32, i32, *mut Il2CppObject,
-) -> *mut Il2CppString;
-extern "C" fn GetBodySwapMotionPath(
-    this: *mut Il2CppObject, a1: *mut Il2CppObject, a2: i32, a3: i32, a4: *mut Il2CppObject,
-) -> *mut Il2CppString {
-    let orig: FiveFn = unsafe { std::mem::transmute(ORIG_BODY.load(Ordering::Relaxed)) };
-    post(orig(this, a1, a2, a3, a4))
-}
-
-extern "C" fn GetFacialSwapMotionPath(
-    this: *mut Il2CppObject, a1: *mut Il2CppObject, a2: i32, a3: i32, a4: *mut Il2CppObject,
-) -> *mut Il2CppString {
-    let orig: FiveFn = unsafe { std::mem::transmute(ORIG_FACIAL.load(Ordering::Relaxed)) };
     post(orig(this, a1, a2, a3, a4))
 }
 
