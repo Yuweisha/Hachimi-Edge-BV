@@ -1,3 +1,6 @@
+// 安卓不注册 CutIn 相机 hook（见 init 里的说明），相应函数在安卓构建里没有调用点。
+#![cfg_attr(not(target_os = "windows"), allow(dead_code))]
+
 use crate::{
     core::Hachimi,
     il2cpp::{symbols::{get_class, get_method_addr}, types::*}
@@ -608,6 +611,11 @@ static GOTO_ERR_LOGGED: std::sync::atomic::AtomicBool = std::sync::atomic::Atomi
 
 /// 打全量调用栈，定位 GotoTitleOnError 的调用者。
 /// 用户要求：全量帧，不限层。
+///
+/// 仅 Windows：依赖 ntdll/kernel32 的 `RtlCaptureStackBackTrace` 与
+/// `GetModuleHandleW`。安卓上这两个 `#[link]` 会让链接阶段直接失败
+/// （`ld.lld: unable to find library -lntdll`）。
+#[cfg(target_os = "windows")]
 fn goto_err_stack() -> String {
     const MAX: usize = 62;
     #[link(name = "ntdll")]
@@ -648,7 +656,10 @@ fn goto_err_stack() -> String {
 extern "C" fn GotoTitleOnError_hook(text: *mut Il2CppString) {
     let msg = unsafe { read_il2cpp_string(text) };
     if !GOTO_ERR_LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        #[cfg(target_os = "windows")]
         warn!("[cutin] GotoTitleOnError 被调用，text={:?}\n{}", msg, goto_err_stack());
+        #[cfg(not(target_os = "windows"))]
+        warn!("[cutin] GotoTitleOnError 被调用，text={:?}", msg);
     }
     if Hachimi::instance().config.load().intercept_error_dialog {
         return;
@@ -703,20 +714,33 @@ unsafe fn scan_cutin_model_ctrl(umamusume: *const Il2CppImage) {
 }
 
 pub fn init(umamusume: *const Il2CppImage) {
-    unsafe { scan_cutin_model_ctrl(umamusume); }
-    if let Ok(k) = get_class(umamusume, c"Gallop.CutIn.Cutt", c"CutInTimelineMotionCamera") {
-        let a = get_method_addr(k, c"AlterLateUpdate", 3);
-        if a != 0 { new_hook!(a, CutInAlterLateUpdate); }
+    // ★ CutIn 相机接管只在 Windows 实现（free_camera 模块 + Windows 输入接管）。
+    //
+    // 安卓上这套 hook 的调用约定与 Windows 不同：挂上
+    // `CutInTimelineMotionCamera.AlterLateUpdate(this, pos, rot, sc)` 之后，
+    // 原函数算出的相机位置变成 NaN（实测日志 `[cutin-game] pos=(NaN,NaN,NaN)`），
+    // 相机被摆到 NaN 坐标 → 抽卡/育成/演出所有 CutIn 画面只剩空背景。
+    // 开关是干净的（cutin_free_camera / cutin_first_person 都是 false），
+    // 所以不是开关没生效，而是这套接管本身在安卓上不成立。
+    // 结论：安卓不注册任何 CutIn 相机 hook。
+    #[cfg(target_os = "windows")]
+    {
+        unsafe { scan_cutin_model_ctrl(umamusume); }
+        if let Ok(k) = get_class(umamusume, c"Gallop.CutIn.Cutt", c"CutInTimelineMotionCamera") {
+            let a = get_method_addr(k, c"AlterLateUpdate", 3);
+            if a != 0 { new_hook!(a, CutInAlterLateUpdate); }
+        }
+        unsafe { dump_ctl_methods(umamusume); }
+        if let Some(ctl) = cls_opt(umamusume, "CutInTimelineController") {
+            let a = get_method_addr(ctl, c"AlterLateUpdate", 0);
+            if a != 0 { new_hook!(a, CTL_AlterLateUpdate); }
+            let a = get_method_addr(ctl, c"AlterUpdate", 0);
+            if a != 0 { new_hook!(a, CTL_AlterUpdate); }
+            let a = get_method_addr(ctl, c"AlterFixedUpdate", 2);
+            if a != 0 { new_hook!(a, CTL_AlterFixedUpdate); }
+        }
     }
-    unsafe { dump_ctl_methods(umamusume); }
-    if let Some(ctl) = cls_opt(umamusume, "CutInTimelineController") {
-        let a = get_method_addr(ctl, c"AlterLateUpdate", 0);
-        if a != 0 { new_hook!(a, CTL_AlterLateUpdate); }
-        let a = get_method_addr(ctl, c"AlterUpdate", 0);
-        if a != 0 { new_hook!(a, CTL_AlterUpdate); }
-        let a = get_method_addr(ctl, c"AlterFixedUpdate", 2);
-        if a != 0 { new_hook!(a, CTL_AlterFixedUpdate); }
-    }
+
     if let Ok(k) = get_class(umamusume, c"Gallop", c"GallopUtil") {
         let a = get_method_addr(k, c"GotoTitleOnError", 1);
         if a != 0 { new_hook!(a, GotoTitleOnError_hook); }

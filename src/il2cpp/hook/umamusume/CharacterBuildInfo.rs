@@ -88,7 +88,16 @@ fn is_universal_dress(dress_id: i32) -> bool {
     if sql::is_general_purpose_dress(dress_id) {
         return true;
     }
-    SHARED_UNIVERSAL_DRESSES.contains(&dress_id)
+    if SHARED_UNIVERSAL_DRESSES.contains(&dress_id) {
+        return true;
+    }
+    // ★ 不属于任何角色的服装都是通用的。运动服（body_type 3/20/2 那几档，例如
+    //   dress 6、58）在 master 里 `general_purpose` 是 0，只有 `chara_id` 为 0；
+    //   旧判定只认 general_purpose，于是 Live 里运动服被当成「专属服装」，
+    //   进了「目标角色里找同 head_sub」的分支，找不到就回退决胜服 ——
+    //   这就是 Live 换装错乱的根因。查不到 id 时 get_dress_chara_id 返回 0，
+    //   同样按通用处理（不认识的服装保持原样，不擅自改写）。
+    sql::get_dress_chara_id(dress_id) == 0
 }
 
 pub fn auto_pick_dress(orig_dress_id: i32, target_chara_id: i32, preferred_dress_id: i32) -> i32 {
@@ -332,6 +341,9 @@ fn replace_char_controller(
         let orig = (*chara_id, *dress_id, *head_id);
         CURRENT_ORIG_DRESS.store(orig.1, Ordering::Release);
         *chara_id = new_chara_id;
+        // 服装自适应统一走 `auto_pick_dress`：通用服装（运动服/泳衣/校服这类
+        // chara_id=0 的）原样保留，游戏自己按新角色体型换算；角色专属服装才去
+        // 目标角色里找同 head_sub 的同款。Live 与育成同一套规则。
         *dress_id = if char_replace.auto_dress {
             auto_pick_dress(orig.1, new_chara_id, new_dress_id)
         } else {
@@ -339,10 +351,20 @@ fn replace_char_controller(
         };
         align_dress_with_chara(dress_id, new_chara_id);
         *head_id = sql::get_head_id_from_dress_id(*dress_id);
-        debug!(
-            "[replace] ctrl={} chara {}->{} dress {}->{} head {}->{}",
-            controller_type, orig.0, *chara_id, orig.1, *dress_id, orig.2, *head_id
-        );
+        // Live / LiveTheater：原服装与最终服装都是「通用服装 + 体型档」的大户，
+        // 换装错乱（运动服 -> 决胜服）全靠这行定位，见 [live-dress]。
+        if matches!(controller_type, 4 | 5) {
+            info!(
+                "[live-dress] ctrl={} chara {}->{} dress {}->{} auto={} pref={} orig_body_type={} orig_general={} new_general={}",
+                controller_type,
+                orig.0, *chara_id,
+                orig.1, *dress_id,
+                char_replace.auto_dress, new_dress_id,
+                sql::get_body_type_from_dress_id(orig.1),
+                sql::is_general_purpose_dress(orig.1),
+                sql::is_general_purpose_dress(*dress_id)
+            );
+        }
         return true;
     }
 
@@ -372,8 +394,12 @@ static mut SKIN_TYPE_FIELD: *mut FieldInfo = 0 as _;
 static mut SOCKS_TYPE_FIELD: *mut FieldInfo = 0 as _;
 
 
-type CharacterBuildInfoRebuildFn = extern "C" fn(this: *mut Il2CppObject);
-extern "C" fn CharacterBuildInfo_Rebuild(this: *mut Il2CppObject) {
+/// il2cpp 实例方法在 native 侧签名是 `(this, args..., const MethodInfo* method)`。
+/// 早期只声明 `(this)`，x1 里的 `MethodInfo*` 被本函数内部的日志/SQL 代码覆盖，
+/// 转调原函数时拿到垃圾指针 → `Rebuild()` 内部 memcpy 越界（安卓实测
+/// `CharacterBuildInfo_Rebuild+2320` 处 SIGSEGV，fault addr 0x792ffffff0）。
+type CharacterBuildInfoRebuildFn = extern "C" fn(this: *mut Il2CppObject, method: *mut std::ffi::c_void);
+extern "C" fn CharacterBuildInfo_Rebuild(this: *mut Il2CppObject, method: *mut std::ffi::c_void) {
     unsafe {
         if !CHARA_ID_FIELD.is_null() {
             let mut chara_id: i32 = get_field_value(this, CHARA_ID_FIELD);
@@ -425,12 +451,12 @@ extern "C" fn CharacterBuildInfo_Rebuild(this: *mut Il2CppObject) {
         }
     }
 
-    get_orig_fn!(CharacterBuildInfo_Rebuild, CharacterBuildInfoRebuildFn)(this);
+    get_orig_fn!(CharacterBuildInfo_Rebuild, CharacterBuildInfoRebuildFn)(this, method);
 }
 
-type GetRaceDressIdFn = extern "C" fn(this: *mut Il2CppObject, is_apply_dress_change: bool) -> i32;
-extern "C" fn GetRaceDressId(this: *mut Il2CppObject, _is_apply_dress_change: bool) -> i32 {
-    let ret = get_orig_fn!(GetRaceDressId, GetRaceDressIdFn)(this, false);
+type GetRaceDressIdFn = extern "C" fn(this: *mut Il2CppObject, is_apply_dress_change: bool, method: *mut std::ffi::c_void) -> i32;
+extern "C" fn GetRaceDressId(this: *mut Il2CppObject, _is_apply_dress_change: bool, method: *mut std::ffi::c_void) -> i32 {
+    let ret = get_orig_fn!(GetRaceDressId, GetRaceDressIdFn)(this, false, method);
 
     if ret > 100000 && ret <= 999999 {
         let chara_id = if ret / 10000 == 90 { ret % 10000 } else { ret / 100 };

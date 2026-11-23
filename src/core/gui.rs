@@ -7054,25 +7054,31 @@ impl ConfigEditor {
             .spacing([column_spacing, 4.0 * scale])
             .min_col_width(label_w)
             .show(ui, |ui| {
-                ui.label(t!("config_editor.cutin_fov_scale"));
-                ui.add(egui::Slider::new(&mut config.cutin_fov_scale, 0.5..=3.0).step_by(0.05));
-                ui.end_row();
+                // ★ 安卓没有键盘/鼠标，CutIn 相机与镜头接管全部不做（
+                //   `MovieProbe::init` 在安卓不注册这些 hook），对应开关一律不显示。
+                //   只保留「拦截错误弹窗」——它跟镜头无关，是纯粹的容错开关。
+                #[cfg(target_os = "windows")]
+                {
+                    ui.label(t!("config_editor.cutin_fov_scale"));
+                    ui.add(egui::Slider::new(&mut config.cutin_fov_scale, 0.5..=3.0).step_by(0.05));
+                    ui.end_row();
 
-                ui.label(t!("config_editor.cutin_progress_slider"));
-                ui.checkbox(&mut config.cutin_progress_slider, "");
-                ui.end_row();
+                    ui.label(t!("config_editor.cutin_progress_slider"));
+                    ui.checkbox(&mut config.cutin_progress_slider, "");
+                    ui.end_row();
 
-                ui.label(t!("config_editor.cutin_block_ui_events"));
-                ui.checkbox(&mut config.cutin_block_ui_events, "");
-                ui.end_row();
+                    ui.label(t!("config_editor.cutin_block_ui_events"));
+                    ui.checkbox(&mut config.cutin_block_ui_events, "");
+                    ui.end_row();
 
-                ui.label(t!("config_editor.cutin_first_person"));
-                ui.checkbox(&mut config.cutin_first_person, "");
-                ui.end_row();
+                    ui.label(t!("config_editor.cutin_first_person"));
+                    ui.checkbox(&mut config.cutin_first_person, "");
+                    ui.end_row();
 
-                ui.label(t!("config_editor.cutin_free_camera"));
-                ui.checkbox(&mut config.cutin_free_camera, "");
-                ui.end_row();
+                    ui.label(t!("config_editor.cutin_free_camera"));
+                    ui.checkbox(&mut config.cutin_free_camera, "");
+                    ui.end_row();
+                }
 
                 ui.label(t!("config_editor.intercept_error_dialog"));
                 ui.checkbox(&mut config.intercept_error_dialog, "");

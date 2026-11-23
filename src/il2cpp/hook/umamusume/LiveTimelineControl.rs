@@ -4,7 +4,7 @@ use crate::{
     core::Hachimi,
     windows::free_camera::{self, CameraScene},
     il2cpp::{
-        symbols::get_method_addr,
+        symbols::{get_class, get_field_from_name, get_method_addr},
         types::*,
     },
 };
@@ -12,6 +12,15 @@ use crate::{
 use super::{Director, LiveTimelineWorkSheet, LiveTimelineKeyPostFilmDataList};
 
 static LIVE_TIMELINE_CONTROL: AtomicUsize = AtomicUsize::new(0);
+static SET_CHARACTOR_LOCATOR_ORIG: AtomicUsize = AtomicUsize::new(0);
+static INIT_CHARA_MOTION_SEQUENCE_ORIG: AtomicUsize = AtomicUsize::new(0);
+static DIRECTOR_GET_PLAY_SONG_ID: AtomicUsize = AtomicUsize::new(0);
+static LIVE_LOCATORS_FIELD: AtomicUsize = AtomicUsize::new(0);
+static LIVE_MOTION_SEQUENCES_FIELD: AtomicUsize = AtomicUsize::new(0);
+static DIRECTOR_CHARACTER_LIST_FIELD: AtomicUsize = AtomicUsize::new(0);
+static CHARACTER_DATA_INDEX_FIELD: AtomicUsize = AtomicUsize::new(0);
+static CHARACTER_VISIBLE_FIELD: AtomicUsize = AtomicUsize::new(0);
+static LIVE_SLOT_TRACE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 
 #[repr(C)]
@@ -486,7 +495,187 @@ extern "C" fn AlterUpdate_FormationOffset(
     apply_current_live_character_options();
 }
 
+fn current_play_song_id() -> i32 {
+    let director = Director::instance();
+    if director.is_null() {
+        return -1;
+    }
+    let song_addr = DIRECTOR_GET_PLAY_SONG_ID.load(Ordering::Acquire);
+    if song_addr == 0 {
+        return -2;
+    }
+    let get_song: extern "C" fn(*mut Il2CppObject) -> i32 =
+        unsafe { std::mem::transmute(song_addr) };
+    get_song(director)
+}
+
+fn trace_is_beyond_1193() -> bool {
+    current_play_song_id() == 1193
+}
+
+type SetCharactorLocatorFn = extern "C" fn(
+    this: *mut Il2CppObject,
+    index: i32,
+    locator: *mut Il2CppObject,
+);
+
+extern "C" fn SetCharactorLocator(
+    this: *mut Il2CppObject,
+    index: i32,
+    locator: *mut Il2CppObject,
+) {
+    let orig: SetCharactorLocatorFn = unsafe {
+        std::mem::transmute(SET_CHARACTOR_LOCATOR_ORIG.load(Ordering::Acquire))
+    };
+    if index == 10 {
+        let n = LIVE_SLOT_TRACE_COUNT.fetch_add(1, Ordering::Relaxed);
+        if n < 80 {
+            let song = current_play_song_id();
+            info!(
+                "[live-slot-trace] SetCharactorLocator index=10 song={} locator_null={}",
+                song,
+                locator.is_null()
+            );
+        }
+    }
+    orig(this, index, locator);
+}
+
+type InitCharaMotionSequenceFn = extern "C" fn(
+    this: *mut Il2CppObject,
+    index: i32,
+);
+
+extern "C" fn InitCharaMotionSequence(this: *mut Il2CppObject, index: i32) {
+    let orig: InitCharaMotionSequenceFn = unsafe {
+        std::mem::transmute(INIT_CHARA_MOTION_SEQUENCE_ORIG.load(Ordering::Acquire))
+    };
+    orig(this, index);
+
+    if index != 10 || !trace_is_beyond_1193() {
+        return;
+    }
+    let locator_field = LIVE_LOCATORS_FIELD.load(Ordering::Acquire) as *mut FieldInfo;
+    let sequence_field = LIVE_MOTION_SEQUENCES_FIELD.load(Ordering::Acquire) as *mut FieldInfo;
+    if locator_field.is_null() || sequence_field.is_null() {
+        warn!("[live-slot-trace] index=10 field lookup failed");
+        return;
+    }
+    let locators: *mut Il2CppArray = unsafe { crate::il2cpp::symbols::get_field_value(this, locator_field) };
+    let sequences: *mut Il2CppArray = unsafe { crate::il2cpp::symbols::get_field_value(this, sequence_field) };
+    let locator = if locators.is_null() {
+        std::ptr::null_mut()
+    } else {
+        unsafe { *((locators.add(1) as *mut *mut Il2CppObject).add(index as usize)) }
+    };
+    let sequence = if sequences.is_null() {
+        std::ptr::null_mut()
+    } else {
+        unsafe { *((sequences.add(1) as *mut *mut Il2CppObject).add(index as usize)) }
+    };
+    let director_list_field = DIRECTOR_CHARACTER_LIST_FIELD.load(Ordering::Acquire) as *mut FieldInfo;
+    let char_data_index_field = CHARACTER_DATA_INDEX_FIELD.load(Ordering::Acquire) as *mut FieldInfo;
+    let char_visible_field = CHARACTER_VISIBLE_FIELD.load(Ordering::Acquire) as *mut FieldInfo;
+    let director = Director::instance();
+    let list: *mut Il2CppObject = crate::il2cpp::symbols::get_field_value(director, director_list_field);
+    let list_access = crate::il2cpp::symbols::IList::<*mut Il2CppObject>::new(list);
+    let count = list_access.as_ref().map(|x| x.count().clamp(0, 20) as usize).unwrap_or(0);
+    let n = LIVE_SLOT_TRACE_COUNT.fetch_add(1, Ordering::Relaxed);
+    if n < 40 {
+        info!(
+            "[live-slot-trace] InitCharaMotionSequence index=10 song=1193 locator_null={} sequence_null={} character_count={}",
+            locator.is_null(), sequence.is_null(), count
+        );
+        if let Some(chars) = list_access.as_ref() {
+            for i in 0..chars.count().clamp(0, 20) {
+                let character = chars.get(i).unwrap_or(std::ptr::null_mut());
+                if character.is_null() { continue; }
+                let data_index = crate::il2cpp::symbols::get_field_value::<i32>(character, char_data_index_field);
+                let visible = crate::il2cpp::symbols::get_field_value::<bool>(character, char_visible_field);
+                info!("[live-slot-trace] character-list[{}] data_index={} visible={}", i, data_index, visible);
+            }
+        }
+    }
+}
+
+fn hook_live_slot_trace(umamusume: *const Il2CppImage) {
+    let Ok(class) = get_class(umamusume, c"Gallop.Live.Cutt", c"LiveTimelineControl") else {
+        return;
+    };
+    let h = Hachimi::instance();
+    for (name, argc, hook, target, tag) in [
+        (
+            c"SetCharactorLocator",
+            2,
+            SetCharactorLocator as *const () as usize,
+            &SET_CHARACTOR_LOCATOR_ORIG,
+            "SetCharactorLocator",
+        ),
+        (
+            c"InitCharaMotionSequence",
+            1,
+            InitCharaMotionSequence as *const () as usize,
+            &INIT_CHARA_MOTION_SEQUENCE_ORIG,
+            "InitCharaMotionSequence",
+        ),
+    ] {
+        let addr = get_method_addr(class, name, argc);
+        if addr == 0 {
+            warn!("[live-slot-trace] {} address missing", tag);
+            continue;
+        }
+        match h.interceptor.hook(addr, hook) {
+            Ok(trampoline) => {
+                target.store(trampoline, Ordering::Release);
+                info!("[live-slot-trace] hooked {}", tag);
+            }
+            Err(error) => error!("[live-slot-trace] hook {} failed: {}", tag, error),
+        }
+    }
+}
+
 pub fn init(umamusume: *const Il2CppImage) {
+    hook_live_slot_trace(umamusume);
+    let Ok(director_class) = get_class(umamusume, c"Gallop.Live", c"Director") else {
+        warn!("[live-slot-trace] Director class missing");
+        return;
+    };
+    let song_id_addr = get_method_addr(director_class, c"GetPlaySongId", 0);
+    if song_id_addr != 0 {
+        DIRECTOR_GET_PLAY_SONG_ID.store(song_id_addr, Ordering::Release);
+    } else {
+        warn!("[live-slot-trace] Director.GetPlaySongId address missing");
+    }
+
+    DIRECTOR_CHARACTER_LIST_FIELD.store(
+        get_field_from_name(director_class, c"_characterObjectList") as usize,
+        Ordering::Release,
+    );
+    let Ok(character_class) = get_class(umamusume, c"Gallop.Live", c"CharacterObject") else {
+        warn!("[live-slot-trace] CharacterObject class missing");
+        return;
+    };
+    CHARACTER_DATA_INDEX_FIELD.store(
+        get_field_from_name(character_class, c"_characterDataIndex") as usize,
+        Ordering::Release,
+    );
+    CHARACTER_VISIBLE_FIELD.store(
+        get_field_from_name(character_class, c"_bVisible") as usize,
+        Ordering::Release,
+    );
+    let Ok(control_class) = get_class(umamusume, c"Gallop.Live.Cutt", c"LiveTimelineControl") else {
+        warn!("[live-slot-trace] LiveTimelineControl class missing");
+        return;
+    };
+    LIVE_LOCATORS_FIELD.store(
+        get_field_from_name(control_class, c"_liveCharactorLocators") as usize,
+        Ordering::Release,
+    );
+    LIVE_MOTION_SEQUENCES_FIELD.store(
+        get_field_from_name(control_class, c"_motionSequenceArray") as usize,
+        Ordering::Release,
+    );
+
     get_class_or_return!(umamusume, "Gallop.Live.Cutt", LiveTimelineControl);
 
     let AlterUpdate_CameraPos_addr = get_method_addr(LiveTimelineControl, c"AlterUpdate_CameraPos", 5);

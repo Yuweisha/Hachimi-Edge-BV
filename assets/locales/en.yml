@@ -180,7 +180,7 @@ config_editor:
   char_replace_cloth: "Dress"
   char_replace_mini: "Replace mini character"
   char_replace_delete: "Delete rule"
-  char_replace_motion: "Replace motion as well"
+  char_replace_motion: "Borrow original character motion"
   char_replace_in_race: "Replace in races as well"
   char_replace_keep_motion: "Keep original character motion"
   char_replace_empty: "No replacement rules yet."

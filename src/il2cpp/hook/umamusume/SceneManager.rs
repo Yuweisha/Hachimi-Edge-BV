@@ -91,20 +91,27 @@ fn ChangeViewCommon(next_view_id: i32) {
     debug!("next_view_id = {}", next_view_id);
 }
 
+/// `SceneManager.ChangeViewJp(this, nextViewId, viewInfo, onCancel, onAccept,
+/// forceChange, isFastDestroy, fadeInDuration)` —— 实例方法，尾部还有隐藏的
+/// `const MethodInfo*`（第 9 个整型参数，ARM64 上走栈）。漏掉它时原函数从栈上
+/// 读到垃圾指针，切换 view 时在 il2cpp 内部 memcpy 越界（实测 tombstone：
+/// `SceneManager::ChangeViewJp+168`，fault addr 0x792ffffff0）。
 type ChangeViewJpfn = extern "C" fn(
     this: *mut Il2CppObject, next_view_id: i32, view_info: *mut Il2CppObject,
     callback_on_change_view_cancel: *mut Il2CppObject, callback_on_change_view_accept: *mut Il2CppObject,
-    force_change: bool, is_fast_destroy: bool, fade_in_duration: f32
+    force_change: bool, is_fast_destroy: bool, fade_in_duration: f32,
+    method: *mut std::ffi::c_void
 );
 extern "C" fn ChangeViewJp(
     this: *mut Il2CppObject, next_view_id: i32, view_info: *mut Il2CppObject,
     callback_on_change_view_cancel: *mut Il2CppObject, callback_on_change_view_accept: *mut Il2CppObject,
-    force_change: bool, is_fast_destroy: bool, fade_in_duration: f32
+    force_change: bool, is_fast_destroy: bool, fade_in_duration: f32,
+    method: *mut std::ffi::c_void
 ) {
     get_orig_fn!(ChangeViewJp, ChangeViewJpfn)(
         this, next_view_id, view_info, callback_on_change_view_cancel,
         callback_on_change_view_accept, force_change, is_fast_destroy,
-        fade_in_duration
+        fade_in_duration, method
     );
     ChangeViewCommon(next_view_id);
 }
@@ -112,16 +119,16 @@ extern "C" fn ChangeViewJp(
 type ChangeViewOtherfn = extern "C" fn(
     this: *mut Il2CppObject, next_view_id: i32, view_info: *mut Il2CppObject,
     callback_on_change_view_cancel: *mut Il2CppObject, callback_on_change_view_accept: *mut Il2CppObject,
-    force_change: bool
+    force_change: bool, method: *mut std::ffi::c_void
 );
 extern "C" fn ChangeViewOther(
     this: *mut Il2CppObject, next_view_id: i32, view_info: *mut Il2CppObject,
     callback_on_change_view_cancel: *mut Il2CppObject, callback_on_change_view_accept: *mut Il2CppObject,
-    force_change: bool
+    force_change: bool, method: *mut std::ffi::c_void
 ) {
     get_orig_fn!(ChangeViewOther, ChangeViewOtherfn)(
         this, next_view_id, view_info, callback_on_change_view_cancel,
-        callback_on_change_view_accept, force_change
+        callback_on_change_view_accept, force_change, method
     );
     ChangeViewCommon(next_view_id);
 }
@@ -179,6 +186,7 @@ pub fn force_goto_home() {
                 true,
                 true,
                 0.0,
+                std::ptr::null_mut(),
             );
         }
         else {
@@ -190,6 +198,7 @@ pub fn force_goto_home() {
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
                 true,
+                std::ptr::null_mut(),
             );
         }
     }

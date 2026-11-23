@@ -168,7 +168,7 @@ config_editor:
   char_replace_cloth: "服装"
   char_replace_mini: "替换迷你角色"
   char_replace_delete: "删除配置"
-  char_replace_motion: "同时替换动作"
+  char_replace_motion: "动作沿用原角色（借用原角色动作）"
   char_replace_in_race: "比赛内也替换角色"
   char_replace_keep_motion: "保留原角色动作"
   char_replace_empty:

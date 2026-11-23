@@ -35,6 +35,7 @@ static ORIG_OUTGAME: AtomicUsize = AtomicUsize::new(0);
 static ORIG_RUNNING: AtomicUsize = AtomicUsize::new(0);
 static ORIG_GATEIN: AtomicUsize = AtomicUsize::new(0);
 static N_HIT: AtomicUsize = AtomicUsize::new(0);
+static N_MISS: AtomicUsize = AtomicUsize::new(0);
 
 fn s(p: *mut Il2CppString) -> String {
     if p.is_null() {
@@ -43,65 +44,20 @@ fn s(p: *mut Il2CppString) -> String {
     unsafe { &*p }.as_utf16str().to_string()
 }
 
-/// 把 `chr{四位}` 换成替换目标。
-/// 只在 config.replace_motion 开、且路径里含 `3d/motion/` 时动手。
-fn rewrite_motion_path(path: &str) -> Option<String> {
-    if path.is_empty() || !path.contains("3d/motion/") {
-        return None;
-    }
-
-    let cfg = Hachimi::instance().config.load();
-    let cr = &cfg.replace_global_char;
-    if !cr.enable || !cr.replace_motion {
-        return None;
-    }
-
-    // 保留原角色动作时这里不能再改：`_motionDressId` 已经是原 dress，
-    // 再把 clip 路径换成目标角色会和它打架（动作资源与 rig 不一致）。
-    if cr.keep_original_motion {
-        return None;
-    }
-
-    // 找路径里的 chr{N}：以 "chr" 开头、后接至少 3 位数字
-    let bytes = path.as_bytes();
-    let mut i = 0;
-    while i + 4 <= bytes.len() {
-        if &bytes[i..i + 3] == b"chr" {
-            let start = i + 3;
-            let mut end = start;
-            while end < bytes.len() && bytes[end].is_ascii_digit() {
-                end += 1;
-            }
-            if end - start == 4 {
-                if let Ok(cid) = path[start..end].parse::<i32>() {
-                    if let Some(entry) = cr
-                        .data
-                        .iter()
-                        .find(|e| e.orig_char_id == cid && e.new_char_id > 0)
-                    {
-                        let mut new_path = path.to_string();
-                        new_path.replace_range(start..end, &format!("{:04}", entry.new_char_id));
-
-                        // 目标角色没有这条动作就不换：换过去只会让加载拿到 null，
-                        // 剧情演出会直接走 GotoTitleOnError（Error0003）。
-                        if super::AssetCheck::is_exist(&new_path) == Some(false) {
-                            return None;
-                        }
-
-                        let n = N_HIT.fetch_add(1, Ordering::Relaxed);
-                        if n < 30 {
-                            info!("[motion] {} → {}", path, new_path);
-                        }
-                        return Some(new_path);
-                    }
-                }
-                break;
-            }
-            i = end;
-        } else {
-            i += 1;
-        }
-    }
+/// 已停用：动作改写统一由 `StoryMotionPath` 负责。
+///
+/// 本模块是「资源层替换」时代的产物 —— 那时 `_charaId` 不动、只改加载路径，
+/// 所以要把 A 的动作路径改写成 B 的。现在数据层真换人（`_charaId` = B），
+/// 路径天然就是 B 的，这里再改只会和 `StoryMotionPath` 方向相反、互相抵消：
+///
+/// | 机制 | 方向 | 语义 |
+/// |---|---|---|
+/// | `StoryMotionPath` | `chrB` → `chrA` | 动作沿用原角色（当前方案） |
+/// | `MotionReplace` | `chrA` → `chrB` | 动作跟目标角色（旧方案） |
+///
+/// 两者同时开时结果取决于调用顺序，不可预期。所以这里直接返回 None，
+/// hook 仍然装着（便于将来需要时复用），但不再改写任何路径。
+fn rewrite_motion_path(_path: &str) -> Option<String> {
     None
 }
 

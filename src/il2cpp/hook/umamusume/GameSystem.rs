@@ -44,6 +44,9 @@ fn apply_free_camera_live_pause_request() {
 }
 
 extern "C" fn GameSystem_Update(this: *mut Il2CppObject) {
+    // 主线程心跳：卡死看门狗据此判断是否卡住并采样栈。
+    super::StallWatchdog::beat();
+
     crate::core::gui::race_slider_drain();
     HorseRaceInfo::refresh_race_state_cache();
     RaceManagerReplayBase::refresh_playback_gated_cache();
@@ -154,6 +157,8 @@ extern "C" fn InitializeGameOther(this: *mut Il2CppObject) -> IEnumerator {
 
 pub fn init(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, GameSystem);
+
+    super::StallWatchdog::init(umamusume);
 
     if Hachimi::instance().game.region == Region::Japan {
         let InitializeGame_addr = get_method_addr(GameSystem, c"InitializeGame", 1);

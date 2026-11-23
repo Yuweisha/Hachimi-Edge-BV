@@ -30,7 +30,7 @@ pub fn init(umamusume: *const Il2CppImage) {
     if let Ok(cyan_image) = get_assembly_image(c"_Cyan.dll") {
         if let Ok(asset_handle_class) = get_class(cyan_image, c"Cyan.Loader", c"AssetHandle") {
             unsafe {
-                GET_ASSETBUNDLE_ADDR = get_method_addr(asset_handle_class, c"get_AssetBundle", 0);
+                GET_ASSETBUNDLE_ADDR = get_method_addr(asset_handle_class, c"get_assetBundle", 0);
             }
         } else {
             error!("Failed to find AssetHandle class in _Cyan.dll");
