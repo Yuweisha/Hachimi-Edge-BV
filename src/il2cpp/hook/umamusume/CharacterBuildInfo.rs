@@ -88,7 +88,16 @@ fn is_universal_dress(dress_id: i32) -> bool {
     if sql::is_general_purpose_dress(dress_id) {
         return true;
     }
-    SHARED_UNIVERSAL_DRESSES.contains(&dress_id)
+    if SHARED_UNIVERSAL_DRESSES.contains(&dress_id) {
+        return true;
+    }
+    // ★ 不属于任何角色的服装都是通用的。运动服（body_type 3/20/2 那几档，例如
+    //   dress 6、58）在 master 里 `general_purpose` 是 0，只有 `chara_id` 为 0；
+    //   旧判定只认 general_purpose，于是 Live 里运动服被当成「专属服装」，
+    //   进了「目标角色里找同 head_sub」的分支，找不到就回退决胜服 ——
+    //   这就是 Live 换装错乱的根因。查不到 id 时 get_dress_chara_id 返回 0，
+    //   同样按通用处理（不认识的服装保持原样，不擅自改写）。
+    sql::get_dress_chara_id(dress_id) == 0
 }
 
 pub fn auto_pick_dress(orig_dress_id: i32, target_chara_id: i32, preferred_dress_id: i32) -> i32 {
@@ -198,6 +207,32 @@ fn dress_table_ready() -> bool {
     false
 }
 
+/// 把目标角色的体型参数写进 CharacterBuildInfo。
+///
+/// 不同角色的 height/bust/skin/socks 不同，只换 chara_id 会让模型用原角色的比例。
+fn sync_body_shape(this: *mut Il2CppObject, chara_id: i32) {
+    let Some((height, bust, skin, socks, _scale, _shape)) = sql::get_chara_body_shape(chara_id) else {
+        return;
+    };
+    unsafe {
+        if !HEIGHT_TYPE_FIELD.is_null() {
+            set_field_value(this, HEIGHT_TYPE_FIELD, &height);
+        }
+        if !BODY_SIZE_FIELD.is_null() {
+            set_field_value(this, BODY_SIZE_FIELD, &height);   // bodySize 与 heightType 同源
+        }
+        if !BUST_TYPE_FIELD.is_null() {
+            set_field_value(this, BUST_TYPE_FIELD, &bust);
+        }
+        if !SKIN_TYPE_FIELD.is_null() {
+            set_field_value(this, SKIN_TYPE_FIELD, &skin);
+        }
+        if !SOCKS_TYPE_FIELD.is_null() {
+            set_field_value(this, SOCKS_TYPE_FIELD, &socks);
+        }
+    }
+}
+
 fn replace_char_controller(
     chara_id: &mut i32, dress_id: &mut i32, head_id: &mut i32,
     controller_type: i32, allow_orig: bool
@@ -264,18 +299,51 @@ fn replace_char_controller(
         return false;
     }
 
+    // 比赛场景（ctrl=1）默认不替换：
+    //   实测替换后画面出现彩色横条/色块，而且会持续污染后续场景，直到重开游戏才恢复。
+    //   需要换比赛里的角色时把 config 的 replace_in_race 设为 true。
+    if !char_replace.replace_in_race
+        && controller_type == UmaControllerType::Race as i32
+    {
+        return false;
+    }
+
     if *chara_id == 9001 && controller_type == UmaControllerType::HomeStand as i32 {
         return false;
     }
 
     if let Some((new_chara_id, new_dress_id)) = find_replacement(char_replace, *chara_id, false) {
+        // ★ mini 场景（ctrl=13）必须用「有 mini 模型」的服装。
+        //   实测（hachimi.log）：dress 4/5/6 -> 904701，而 dress_data[904701].have_mini=0，
+        //   mini 资源（3d/chara/mini/{mchr,mbdy,mtail}）加载不到 → 模型和图标全空白 → 软死。
+        //   所以这里查目标服装的 have_mini，为 0 就跳过替换（保持原角色）。
+        //   NPC（2000 段）和特殊角色（9000 段）在普通/Live 场景能正常替换，不能一刀切排除。
+        if controller_type == UmaControllerType::Mini as i32
+            && !sql::get_dress_have_mini(new_dress_id)
+        {
+            warn!(
+                "[replace] mini 场景：目标服装 {}（角色 {}）没有 mini 模型，跳过替换",
+                new_dress_id, new_chara_id
+            );
+            return false;
+        }
+        // 注：这里原来有个「dress_id < 1000 就当 mini 专用、非 mini 场景跳过」的判断，
+        //     是错的。master.mdb 里 id < 1000 的 65 条 dress 全部 chara_id = 0，
+        //     是通用服装（校服、Live 服等），不是 mini 专用。
+        //     比如 dress_id=2 是通用校服（body_type=2 / use_live=1 / use_home=1），
+        //     被这个判断挡掉后 _dressId 停留在 2，而资源层照样把 head 换成目标角色，
+        //     骨架和资源对不上 → 剧情/Live 卡在装配阶段。
         if crate::il2cpp::hook::umamusume::SceneManager::is_race_scene_family()
             && (!chara_table_ready() || !sql::is_playable_chara(new_chara_id))
         {
             return false;
         }
         let orig = (*chara_id, *dress_id, *head_id);
+        CURRENT_ORIG_DRESS.store(orig.1, Ordering::Release);
         *chara_id = new_chara_id;
+        // 服装自适应统一走 `auto_pick_dress`：通用服装（运动服/泳衣/校服这类
+        // chara_id=0 的）原样保留，游戏自己按新角色体型换算；角色专属服装才去
+        // 目标角色里找同 head_sub 的同款。Live 与育成同一套规则。
         *dress_id = if char_replace.auto_dress {
             auto_pick_dress(orig.1, new_chara_id, new_dress_id)
         } else {
@@ -283,10 +351,20 @@ fn replace_char_controller(
         };
         align_dress_with_chara(dress_id, new_chara_id);
         *head_id = sql::get_head_id_from_dress_id(*dress_id);
-        debug!(
-            "[replace] ctrl={} chara {}->{} dress {}->{} head {}->{}",
-            controller_type, orig.0, *chara_id, orig.1, *dress_id, orig.2, *head_id
-        );
+        // Live / LiveTheater：原服装与最终服装都是「通用服装 + 体型档」的大户，
+        // 换装错乱（运动服 -> 决胜服）全靠这行定位，见 [live-dress]。
+        if matches!(controller_type, 4 | 5) {
+            info!(
+                "[live-dress] ctrl={} chara {}->{} dress {}->{} auto={} pref={} orig_body_type={} orig_general={} new_general={}",
+                controller_type,
+                orig.0, *chara_id,
+                orig.1, *dress_id,
+                char_replace.auto_dress, new_dress_id,
+                sql::get_body_type_from_dress_id(orig.1),
+                sql::is_general_purpose_dress(orig.1),
+                sql::is_general_purpose_dress(*dress_id)
+            );
+        }
         return true;
     }
 
@@ -295,6 +373,9 @@ fn replace_char_controller(
 
 pub static CURRENT_CONTROLLER_TYPE: std::sync::atomic::AtomicI32 =
     std::sync::atomic::AtomicI32::new(-1);
+
+/// 替换前的原 dress_id，供 `keep_original_motion` 使用
+pub static CURRENT_ORIG_DRESS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 
 static mut CHARA_ID_FIELD: *mut FieldInfo = 0 as _;
 static mut CARD_ID_FIELD: *mut FieldInfo = 0 as _;
@@ -305,10 +386,20 @@ static mut MOTION_DRESS_ID_FIELD: *mut FieldInfo = 0 as _;
 static mut USE_DRESS_DATA_HEAD_FIELD: *mut FieldInfo = 0 as _;
 static mut BODY_MODEL_SUB_ID_FIELD: *mut FieldInfo = 0 as _;
 static mut MOTION_BODY_MODEL_SUB_ID_FIELD: *mut FieldInfo = 0 as _;
+// 体型参数（不同角色的身高档/胸围/肤色/袜子类型不同，不同步会导致模型比例错乱）
+static mut HEIGHT_TYPE_FIELD: *mut FieldInfo = 0 as _;
+static mut BODY_SIZE_FIELD: *mut FieldInfo = 0 as _;
+static mut BUST_TYPE_FIELD: *mut FieldInfo = 0 as _;
+static mut SKIN_TYPE_FIELD: *mut FieldInfo = 0 as _;
+static mut SOCKS_TYPE_FIELD: *mut FieldInfo = 0 as _;
 
 
-type CharacterBuildInfoRebuildFn = extern "C" fn(this: *mut Il2CppObject);
-extern "C" fn CharacterBuildInfo_Rebuild(this: *mut Il2CppObject) {
+/// il2cpp 实例方法在 native 侧签名是 `(this, args..., const MethodInfo* method)`。
+/// 早期只声明 `(this)`，x1 里的 `MethodInfo*` 被本函数内部的日志/SQL 代码覆盖，
+/// 转调原函数时拿到垃圾指针 → `Rebuild()` 内部 memcpy 越界（安卓实测
+/// `CharacterBuildInfo_Rebuild+2320` 处 SIGSEGV，fault addr 0x792ffffff0）。
+type CharacterBuildInfoRebuildFn = extern "C" fn(this: *mut Il2CppObject, method: *mut std::ffi::c_void);
+extern "C" fn CharacterBuildInfo_Rebuild(this: *mut Il2CppObject, method: *mut std::ffi::c_void) {
     unsafe {
         if !CHARA_ID_FIELD.is_null() {
             let mut chara_id: i32 = get_field_value(this, CHARA_ID_FIELD);
@@ -318,7 +409,8 @@ extern "C" fn CharacterBuildInfo_Rebuild(this: *mut Il2CppObject) {
             let mut head_model_sub_id: i32 = get_field_value(this, HEAD_MODEL_SUB_ID_FIELD);
 
 
-            if replace_char_controller(&mut chara_id, &mut dress_id, &mut head_model_sub_id, controller_type, false) {
+            let replaced = replace_char_controller(&mut chara_id, &mut dress_id, &mut head_model_sub_id, controller_type, false);
+            if replaced {
                 set_field_value(this, CHARA_ID_FIELD, &chara_id);
                 set_field_value(this, DRESS_ID_FIELD, &dress_id);
                 set_field_value(this, HEAD_MODEL_SUB_ID_FIELD, &head_model_sub_id);
@@ -330,39 +422,41 @@ extern "C" fn CharacterBuildInfo_Rebuild(this: *mut Il2CppObject) {
                     set_field_value(this, USE_DRESS_DATA_HEAD_FIELD, &no);
                 }
 
-                // 动作资源按 type 分包，沿用原角色的 type 会去取目标角色没有的那几档。
-                // 用 chara_type 查目标角色在该场景下的 type；查不到就保持原值。
-                if controller_type == UmaControllerType::EventTimeline as i32 {
-                    let orig_type: i32 = get_field_value(this, BODY_MODEL_SUB_ID_FIELD);
-                    if let Some(t) = sql::get_chara_motion_type(chara_id, 3, 0)
-                        .or_else(|| sql::get_chara_motion_type(chara_id, 0, 0))
-                    {
-                        if t != orig_type {
-                            warn!(
-                                "[replace] motion type {} -> {} (chara {})",
-                                orig_type, t, chara_id
-                            );
-                            set_field_value(this, BODY_MODEL_SUB_ID_FIELD, &t);
-                            if !MOTION_BODY_MODEL_SUB_ID_FIELD.is_null() {
-                                set_field_value(this, MOTION_BODY_MODEL_SUB_ID_FIELD, &t);
-                            }
-                        }
-                    }
-                }
+                // 动作 type 不做替换：剧情动作是按原角色制作的 clip，而 `chara_type` 是
+                // 目标角色的动作族；两者一起换会出现「clip 是 A 的、rig/type 是 B 的」，
+                // 表现为动作错位。动作要么整套跟原角色（现状），要么整套跟目标角色
+                // （目标缺专属 clip 时只能回退，见 MotionReplace / StoryMotionPath）。
+                // 体型参数同步：不同角色的 height/bust/skin/socks 不同，
+                // 只换 chara_id 会让模型用原角色的比例，看起来「变了个样子」。
+                sync_body_shape(this, chara_id);
 
-                set_field_value(this, MOTION_DRESS_ID_FIELD, &dress_id);
-                let no_card_id = -1;
-                set_field_value(this, CARD_ID_FIELD, &no_card_id);
+                // 动作来源：默认跟随替换后的 dress（换成新角色动作）。
+                // 打开 keep_original_motion 时保留原 dress —— 模型换新、动作沿用旧的。
+                // 原 dress 值由 `replace_char_controller` 在改之前存进 CURRENT_ORIG_DRESS。
+                let keep_motion = Hachimi::instance()
+                    .config
+                    .load()
+                    .replace_global_char
+                    .keep_original_motion;
+                let motion_dress = if keep_motion {
+                    CURRENT_ORIG_DRESS.load(Ordering::Acquire)
+                } else {
+                    dress_id
+                };
+                set_field_value(this, MOTION_DRESS_ID_FIELD, &motion_dress);
+                let card_id = sql::get_first_card_id(chara_id);
+                let card_id = if card_id > 0 { card_id } else { -1 };
+                set_field_value(this, CARD_ID_FIELD, &card_id);
             }
         }
     }
 
-    get_orig_fn!(CharacterBuildInfo_Rebuild, CharacterBuildInfoRebuildFn)(this);
+    get_orig_fn!(CharacterBuildInfo_Rebuild, CharacterBuildInfoRebuildFn)(this, method);
 }
 
-type GetRaceDressIdFn = extern "C" fn(this: *mut Il2CppObject, is_apply_dress_change: bool) -> i32;
-extern "C" fn GetRaceDressId(this: *mut Il2CppObject, _is_apply_dress_change: bool) -> i32 {
-    let ret = get_orig_fn!(GetRaceDressId, GetRaceDressIdFn)(this, false);
+type GetRaceDressIdFn = extern "C" fn(this: *mut Il2CppObject, is_apply_dress_change: bool, method: *mut std::ffi::c_void) -> i32;
+extern "C" fn GetRaceDressId(this: *mut Il2CppObject, _is_apply_dress_change: bool, method: *mut std::ffi::c_void) -> i32 {
+    let ret = get_orig_fn!(GetRaceDressId, GetRaceDressIdFn)(this, false, method);
 
     if ret > 100000 && ret <= 999999 {
         let chara_id = if ret / 10000 == 90 { ret % 10000 } else { ret / 100 };
@@ -386,9 +480,6 @@ extern "C" fn GetRaceDressId(this: *mut Il2CppObject, _is_apply_dress_change: bo
 fn init_character_build_info(umamusume: *const Il2CppImage) {
     get_class_or_return!(umamusume, Gallop, CharacterBuildInfo);
 
-    let CharacterBuildInfo_Rebuild_addr = get_method_addr(CharacterBuildInfo, c"Rebuild", 0);
-    new_hook!(CharacterBuildInfo_Rebuild_addr, CharacterBuildInfo_Rebuild);
-
     unsafe {
         CHARA_ID_FIELD = get_field_from_name(CharacterBuildInfo, c"_charaId");
         CARD_ID_FIELD = get_field_from_name(CharacterBuildInfo, c"_cardId");
@@ -399,7 +490,16 @@ fn init_character_build_info(umamusume: *const Il2CppImage) {
         USE_DRESS_DATA_HEAD_FIELD = get_field_from_name(CharacterBuildInfo, c"_isUseDressDataHeadModelSubId");
         BODY_MODEL_SUB_ID_FIELD = get_field_from_name(CharacterBuildInfo, c"_bodyModelSubId");
         MOTION_BODY_MODEL_SUB_ID_FIELD = get_field_from_name(CharacterBuildInfo, c"_motionBodyModelSubId");
+        HEIGHT_TYPE_FIELD = get_field_from_name(CharacterBuildInfo, c"_heightType");
+        BODY_SIZE_FIELD = get_field_from_name(CharacterBuildInfo, c"_bodySize");
+        BUST_TYPE_FIELD = get_field_from_name(CharacterBuildInfo, c"_bustType");
+        SKIN_TYPE_FIELD = get_field_from_name(CharacterBuildInfo, c"_skinType");
+        SOCKS_TYPE_FIELD = get_field_from_name(CharacterBuildInfo, c"_socksType");
     }
+
+    let CharacterBuildInfo_Rebuild_addr = get_method_addr(CharacterBuildInfo, c"Rebuild", 0);
+    new_hook!(CharacterBuildInfo_Rebuild_addr, CharacterBuildInfo_Rebuild);
+
 }
 
 fn init_work_single_mode_chara_data(umamusume: *const Il2CppImage) {

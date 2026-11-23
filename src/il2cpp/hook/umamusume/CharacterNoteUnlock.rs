@@ -127,9 +127,9 @@ unsafe fn extend_card_list(list: *mut Il2CppObject, wanted: &[i32], owned: &[i32
     added
 }
 
-type WCDGetCardList1Fn = extern "C" fn(this: *mut Il2CppObject, chara_id: i32) -> *mut Il2CppObject;
-extern "C" fn WCDGetCardList1(this: *mut Il2CppObject, chara_id: i32) -> *mut Il2CppObject {
-    let ret = get_orig_fn!(WCDGetCardList1, WCDGetCardList1Fn)(this, chara_id);
+type WCDGetCardList1Fn = extern "C" fn(this: *mut Il2CppObject, chara_id: i32, method: *mut std::ffi::c_void) -> *mut Il2CppObject;
+extern "C" fn WCDGetCardList1(this: *mut Il2CppObject, chara_id: i32, method: *mut std::ffi::c_void) -> *mut Il2CppObject {
+    let ret = get_orig_fn!(WCDGetCardList1, WCDGetCardList1Fn)(this, chara_id, method);
     if Hachimi::instance().config.load().bv_unlock_all {
         ensure_card_table();
         unsafe {

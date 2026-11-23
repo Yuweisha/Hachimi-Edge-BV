@@ -30,12 +30,23 @@ fn cue_available(sheet: &str) -> bool {
     available
 }
 
-fn resolve_target_sheet(sheet: &str, range: Range<usize>, new_chara: i32) -> Option<String> {
+pub fn resolve_target_sheet(sheet: &str, range: Range<usize>, new_chara: i32) -> Option<String> {
     let same = {
         let mut s = sheet.to_string();
         s.replace_range(range.clone(), &format!("{:04}", new_chara));
         s
     };
+
+    // ★ 目标没音频就回落原音（NPC/无配音角色会走到这里）。
+    //   判据用 KNOWN_SHEETS（character_system_text.cue_sheet 的权威清单）：
+    //     Some(false) = 这条 cue 在清单里查不到 → 目标角色没有这条语音 → 回落
+    //     None        = 清单还没加载完 → 不做判断，继续走后面的资源检查
+    //   不能只靠 cue_available：它调 IsAvailableCueSheet，拿不到地址/实例时
+    //   会直接返回 true，NPC 也会被当成「有音频」，替换后就是静音。
+    if let Some(false) = known_sheet(&same) {
+        debug!("[voice] {sheet} 的目标 {same} 不在已知 cue 清单里（目标无音频），保留原音");
+        return None;
+    }
 
     if !sheet.contains("/snd_bgm_live_") {
         return Some(same);
@@ -70,6 +81,33 @@ fn resolve_target_sheet(sheet: &str, range: Range<usize>, new_chara: i32) -> Opt
     }
 
     None
+}
+
+/// 把「同一角色的第 2 个及以后声部」的变体号改成 _00（主唱变体）。
+///
+/// 背景：一个角色通常只录了一条人声（变体 _00）。当同一个角色占多个演唱位置时，
+/// 位置 2..N 会请求 _01/_02... 这些不存在的变体，CriWare 不播也不报错 → 静音。
+/// 这里把重复位置的变体统一回 _00，让它们复用主唱录音（声音会重叠，但不再是静音）。
+///
+/// 返回 Some(新名) 表示改成功（且 _00 确实存在），None 表示保持原样。
+pub fn collapse_to_main_variant(sheet: &str) -> Option<String> {
+    if !sheet.contains("/snd_bgm_live_") && !sheet.starts_with("snd_bgm_live_") {
+        return None;
+    }
+    let at = sheet.rfind('_')?;
+    let variant = sheet.get(at + 1..)?;
+    if variant.len() != 2 || !variant.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    if variant == "00" {
+        return None;
+    }
+    let main = format!("{}_00", &sheet[..at]);
+    if cue_available(&main) {
+        Some(main)
+    } else {
+        None
+    }
 }
 
 fn fallback_variant_if_unavailable(sheet: &str) -> Option<String> {

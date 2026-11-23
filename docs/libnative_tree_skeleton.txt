@@ -1,0 +1,385 @@
+
+===== 0x03bd10 (237 行) =====
+  调用: 0x046600x14, 0x0398e0x10, 0x0469c0x5, 0x046830x4, 0x045c10x4, 0x039c20x4, 0x039a60x4, 0x03bd10x3, 0x046d10x2, 0x048740x2, 0x045fd0x2, 0x039ba0x1, 0x045900x1, 0x074e60x1
+    if (*(longlong *)(param_1 + 0x18) == 0) {
+    if (iVar5 != 0) {
+    return iVar5;
+    if (pcVar4 == (code *)0x0) {
+    if (*(short *)(param_4 + 3) < 0) {
+    if (iVar5 != 0) {
+    return -0x4f80;
+    if ((ulonglong)(*(longlong *)(param_1 + 0x78) * 2) < uVar7) {
+    return -0x4f80;
+    if (iVar5 == 0) {
+    if (*(short *)(param_4 + 3) < 0) {
+    do {
+    if (iVar6 == 0) break;
+    if (iVar5 != 0) goto LAB_7ffa1b03be65;
+    while ((-1 < iVar6 && (iVar5 = FUN_7ffa1b046830(plVar1,plVar1,param_1 + 8), iVar5 == 0))) {
+    if (iVar5 != 0) {
+    return iVar5;
+    if (iVar5 == 0) {
+    while ((-1 < iVar6 && (iVar5 = FUN_7ffa1b046830(puVar2,puVar2,param_1 + 8), iVar5 == 0))) {
+    if (iVar5 != 0) {
+    return iVar5;
+    if ((iVar5 == 0) && (*(short *)(param_4 + 7) < 0)) {
+    do {
+    if (iVar6 == 0) break;
+    if (iVar5 != 0) {
+    return iVar5;
+    if (iVar5 != 0) {
+    return iVar5;
+    if (iVar5 != 0) {
+    return iVar5;
+    if (iVar5 != 0) {
+    return iVar5;
+    if (pcVar4 == (code *)0x0) {
+    if (*(short *)(param_4 + 3) < 0) {
+    if (iVar5 != 0) {
+    return -0x4f80;
+    if ((ulonglong)(*(longlong *)(param_1 + 0x78) * 2) < uVar7) {
+    return -0x4f80;
+    if (iVar5 == 0) {
+    if (*(short *)(param_4 + 3) < 0) {
+    do {
+    if (iVar6 == 0) break;
+    if (iVar5 != 0) goto LAB_7ffa1b03c0a5;
+    while ((-1 < iVar6 && (iVar5 = FUN_7ffa1b046830(plVar1,plVar1,param_1 + 8), iVar5 == 0))) {
+    if (iVar5 != 0) {
+    return iVar5;
+
+===== 0x03abb0 (820 行) =====
+  调用: 0x046600x24, 0x046830x11, 0x046d10x7, 0x048740x7, 0x045fd0x5, 0x0469c0x5, 0x03abb0x3, 0x0c8950x3, 0x045c10x2, 0x0466e0x2, 0x0459c0x2, 0x03a610x1, 0x048ce0x1, 0x045d10x1
+    if (param_3 < (undefined8 ***)0x2) {
+    return uVar7;
+    if (puVar8 == (undefined8 *)0x0) {
+    return 0xffffb280;
+    do {
+    if (uVar4 == 0) {
+    do {
+    if (uVar4 != 0) goto LAB_7ffa1b03bae7;
+    if (pcVar2 == (code *)0x0) {
+    if (*(short *)(puVar19 + 3) < 0) {
+    if (iVar6 != 0) goto LAB_7ffa1b03bada;
+    if ((ulonglong)(*(longlong *)(param_1 + 0x78) * 2) < uVar7) goto LAB_7ffa1b03bada;
+    if (uVar4 == 0) {
+    if (*(short *)(puVar19 + 3) < 0) {
+    do {
+    if (iVar6 == 0) break;
+    if (uVar4 != 0) goto LAB_7ffa1b03adc7;
+    while (-1 < iVar6) {
+    if (uVar4 != 0) break;
+    if ((int)uVar7 != 0) goto LAB_7ffa1b03bae7;
+    if (uVar4 == 0) {
+    while( true ) {
+    if (pppuVar12 != (undefined8 ***)0x0) break;
+    if (uVar4 != 0) goto LAB_7ffa1b03bae7;
+    if (uVar4 != 0) goto LAB_7ffa1b03bae7;
+    if (pcVar2 == (code *)0x0) {
+    if (*(short *)(lVar9 + 0x18) < 0) {
+    if (iVar6 != 0) goto LAB_7ffa1b03bada;
+    if ((ulonglong)(*(longlong *)(param_1 + 0x78) * 2) < uVar7) goto LAB_7ffa1b03bada;
+    if (uVar4 == 0) {
+    if (*(short *)(lVar9 + 0x18) < 0) {
+    do {
+    if (iVar6 == 0) break;
+    if (uVar4 != 0) goto LAB_7ffa1b03b473;
+    while (-1 < iVar6) {
+    if (uVar4 != 0) break;
+    if ((int)uVar7 != 0) goto LAB_7ffa1b03bae7;
+    if (uVar4 != 0) goto LAB_7ffa1b03bae7;
+    if (*(longlong *)(param_1 + 0x90) == 0) {
+    if ((short)local_100 < 0) {
+    if (uVar7 != 0) {
+    do {
+    if (*plVar10 != 0) break;
+    do {
+    if (*ppppuVar17 != (undefined8 ***)0x0) break;
+    if (uVar7 == 0) {
+
+===== 0x03c3e0 (138 行) =====
+  调用: 0x0398e0x11, 0x039a60x6, 0x046600x5, 0x03c3e0x3, 0x039390x2, 0x03bd10x1, 0x039490x1, 0x045c10x1, 0x039c20x1
+    if (*(longlong *)(param_4 + 0x20) != 0) {
+    if (iVar1 == 0) {
+    return uVar2;
+    if (iVar1 == 0) {
+    return uVar2;
+    if (iVar1 == 0) {
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if (iVar1 == 0) {
+    if (iVar1 == 0) {
+    return uVar2;
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 != 0) {
+    return uVar2;
+    if ((int)uVar2 == 0) {
+    return uVar2;
+
+===== 0x03dce0 (258 行) =====
+  调用: 0x03dce0x3, 0x0c8950x3, 0x2ecc80x2, 0x2ec8c0x2, 0x046560x1, 0x046830x1, 0x0466e0x1
+    if ((*(short *)(param_1 + 0x72) == 0) || ((*(byte *)*plVar17 & 1) == 0)) {
+    return -0x4f80;
+    if ((ulonglong)uVar2 == 0) {
+    if ((local_38 == param_2) || (uVar2 == 0)) {
+    if (-((int)*(short *)(param_1 + 0x70) * (int)(short)param_2[1]) < 0) {
+    if (iVar4 < 0) {
+    if (iVar4 != 0) goto LAB_7ffa1b03de61;
+    if (10000 < uVar13) {
+    goto LAB_7ffa1b03debd;
+    if (uVar11 < uVar13) {
+    if (puVar5 == (ulonglong *)0x0) {
+    goto LAB_7ffa1b03deb2;
+    if (puVar9 != (ulonglong *)0x0) {
+    if (uVar11 != 0) {
+    for (; lVar7 != 0; lVar7 = lVar7 + -1) {
+    if ((puVar5 != local_48) && (uVar13 != 0)) {
+    do {
+    if (uVar13 < uVar18) {
+    if (7 < uVar8) {
+    do {
+    uVar22 = (uint)(uVar11 >> 0x20);
+    if (uVar18 <= uVar13) goto LAB_7ffa1b03e06c;
+    do {
+    if (param_4 != 0) {
+    do {
+    if ((ulonglong)param_5 != 0) {
+    do {
+    if (uVar18 < (ulonglong)uVar12 * 0x40) {
+    if (param_4 != 0) {
+    do {
+    if (iVar4 == 0) goto LAB_7ffa1b03de66;
+    if (lVar7 != 0) {
+    do {
+    if (*plVar10 != 0) break;
+    if (uVar11 == 0) {
+    goto LAB_7ffa1b03de0e;
+    if (10000 < uVar11) {
+    goto LAB_7ffa1b03debd;
+    if (puVar5 != (ulonglong *)0x0) {
+    goto LAB_7ffa1b03de00;
+    if (puVar14 != (ulonglong *)0x0) {
+    if (uVar13 != 0) {
+    for (; lVar7 != 0; lVar7 = lVar7 + -1) {
+    if (puVar9 != (ulonglong *)0x0) {
+    if ((ulonglong)uVar12 != 0) {
+    for (; lVar7 != 0; lVar7 = lVar7 + -1) {
+
+===== 0x03d2e0 (392 行) =====
+  调用: 0x0398e0x11, 0x046600x9, 0x0469c0x8, 0x0c8950x7, 0x2ec8c0x6, 0x2ecc80x4, 0x03d2e0x3, 0x045900x3, 0x03d200x2, 0x03bd10x2, 0x039a60x2, 0x03c730x1, 0x039390x1, 0x039490x1
+    if ((iVar5 == 0) &&
+    while( true ) {
+    if (iVar5 != 0) break;
+    if (iVar5 != 0) break;
+    if (local_138 == (undefined1 *)0x0) {
+    if (iVar5 == 0) {
+    if (param_2 != &local_158) {
+    if (local_150._2_2_ == 0) {
+    if (*(ushort *)((longlong)param_2 + 10) != 0) {
+    do {
+    if (uVar3 == 0) break;
+    if (*(ushort *)((longlong)param_2 + 10) < uVar4) {
+    if (iVar5 != 0) goto LAB_7ffa1b03db6f;
+    if (ppuVar1 != &local_148) {
+    if (local_140._2_2_ == 0) {
+    if (*(ushort *)((longlong)param_2 + 0x1a) != 0) {
+    do {
+    if (uVar3 == 0) break;
+    if (*(ushort *)((longlong)param_2 + 0x1a) < uVar4) {
+    if (iVar5 != 0) goto LAB_7ffa1b03db6f;
+    if (ppuVar2 != &local_138) {
+    if (local_130._2_2_ == 0) {
+    if (*(ushort *)((longlong)param_2 + 0x2a) != 0) {
+    do {
+    if (uVar3 == 0) break;
+    if (*(ushort *)((longlong)param_2 + 0x2a) < uVar4) {
+    if (iVar5 == 0) {
+    if (iVar5 == 0) {
+    if (iVar5 != 0) goto LAB_7ffa1b03db85;
+    if (((iVar5 == 0) &&
+    if ((iVar5 == 0) && ((short)local_80 < 0)) {
+    do {
+    if (iVar6 == 0) break;
+    if (iVar5 != 0) goto LAB_7ffa1b03db6f;
+    if ((iVar5 == 0) &&
+    if (iVar5 == 0) {
+    if (iVar5 == 0) {
+    if (((((iVar5 == 0) &&
+    if ((iVar5 == 0) && (*(short *)(param_2 + 1) < 0)) {
+    do {
+    if (iVar6 == 0) break;
+    if (iVar5 != 0) goto LAB_7ffa1b03db6f;
+    if (iVar5 == 0) {
+    if ((iVar5 == 0) && (*(short *)(param_2 + 1) < 0)) {
+    do {
+    if (iVar6 == 0) break;
+
+===== 0x03bbc0 (73 行) =====
+  调用: 0x03bbc0x3, 0x046830x2, 0x046600x1, 0x046560x1, 0x0466e0x1, 0x0456a0x1, 0x0c8950x1
+    if (-((int)*(short *)(param_2 + 0x18) * (int)sVar5) < 0) {
+    if (iVar2 < 0) {
+    if (iVar3 != 0) goto LAB_7ffa1b03bca0;
+    if (iVar3 == 0) {
+    if (iVar2 == 0) {
+    if (iVar3 != 0) goto LAB_7ffa1b03bcba;
+    if (iVar3 != 0) goto LAB_7ffa1b03bca0;
+    if (local_48 != (undefined1 *)0x0) {
+    if ((ulonglong)local_40._2_2_ != 0) {
+    for (; lVar4 != 0; lVar4 = lVar4 + -1) {
+    return iVar3;
+
+===== 0x03a610 (333 行) =====
+  调用: 0x046600x7, 0x046830x4, 0x03a610x3, 0x046d10x2, 0x048740x2, 0x0398e0x2, 0x048ce0x1, 0x0466e0x1, 0x045d10x1, 0x045fd0x1, 0x0469c0x1, 0x0c8950x1
+    if ((int)uVar5 == 0) {
+    return uVar5;
+    if (uVar2 == 0) {
+    if (uVar2 == 0) {
+    if (pcVar1 == (code *)0x0) {
+    if ((int)uVar5 == 0) {
+    if (uVar2 == 0) {
+    if (*(code **)(param_1 + 0x90) != (code *)0x0) {
+    if ((short)local_58 < 0) {
+    if (uVar5 != 0) {
+    do {
+    if (*plVar6 != 0) break;
+    do {
+    if (*plVar6 != 0) break;
+    if (uVar5 == 0) {
+    if (bVar15) goto LAB_7ffa1b03a874;
+    else if (uVar8 < uVar5) {
+    goto LAB_7ffa1b03a872;
+    do {
+    if ((longlong)uVar5 < 0) {
+    goto LAB_7ffa1b03a892;
+    do {
+    if ((uVar8 & *(ulonglong *)(local_60 + (longlong)(int)uVar2 * 8)) != 0) break;
+    uVar5 = ((longlong)(int)uVar2 + 1) * 0x40 - uVar5;
+    if (uVar5 <= (ulonglong)(*(longlong *)(param_1 + 0x78) * 2)) {
+    if (uVar2 == 0) {
+    if ((short)local_58 < 0) {
+    do {
+    if (uVar11 != 0) {
+    do {
+    if (*plVar6 != 0) break;
+    do {
+    if (*puVar7 != 0) break;
+    if (uVar8 == 0) {
+    if (uVar9 == 0) break;
+    if ((uVar9 <= uVar8) && (-1 < sVar12)) {
+    if (uVar8 != 0) {
+    while (uVar9 = *(ulonglong *)
+    if (uVar9 < *puVar7) {
+    goto LAB_7ffa1b03a9ba;
+    if (uVar8 == 0) goto LAB_7ffa1b03aada;
+    goto LAB_7ffa1b03a9b7;
+    if (uVar8 <= uVar9) goto LAB_7ffa1b03a964;
+    if (iVar4 == 0) break;
+    if ((int)((int)*(short *)(param_1 + 0x10) * uVar2) < 0) {
+    if (uVar11 != 0) {
+
+===== 0x03ceb0 (198 行) =====
+  调用: 0x0c8950x5, 0x03ceb0x3, 0x039390x2, 0x03abb0x2, 0x03bd10x1, 0x03c3e0x1
+    if (iVar2 == 0) {
+    if (uVar11 != 0) {
+    do {
+    lVar5 = (ulonglong)bVar1 * 0x30 + param_2;
+    if (((uVar3 % param_5 == 0) &&
+    (iVar2 = FUN_7ffa1b039390(lVar5,(ulonglong)(bVar1 >> 1) * 0x30 + param_2), iVar2 != 0))
+    goto LAB_7ffa1b03d121;
+    if (1 < bVar8) {
+    do {
+    local_78[lVar5] = uVar3 * 0x30 + param_2;
+    if (iVar2 == 0) {
+    if (1 < bVar8) {
+    do {
+    if (bVar1 != 0) {
+    lVar10 = uVar3 * 0x30 + param_2;
+    do {
+    iVar2 = FUN_7ffa1b03c3e0(local_c0,(uVar3 + uVar11) * 0x30 + param_2,lVar5,lVar10);
+    if (iVar2 != 0) goto LAB_7ffa1b03d121;
+    if (1 < uVar3) {
+    do {
+    if ((iVar2 == 0) && ((char)local_c8 != '\0')) {
+    do {
+    if (puVar4 != (undefined8 *)0x0) {
+    if (puVar7 != (undefined1 *)0x0) {
+    if ((ulonglong)*(ushort *)((longlong)puVar4 + 10) != 0) {
+    for (; lVar5 != 0; lVar5 = lVar5 + -1) {
+    if (local_b8 != (undefined1 *)0x0) {
+    if ((ulonglong)local_b0._2_2_ != 0) {
+    for (; lVar5 != 0; lVar5 = lVar5 + -1) {
+    if (local_a8 != (undefined1 *)0x0) {
+    if ((ulonglong)local_a0._2_2_ != 0) {
+    for (; lVar5 != 0; lVar5 = lVar5 + -1) {
+    if (local_98 != (undefined1 *)0x0) {
+    if ((ulonglong)local_90._2_2_ != 0) {
+    for (; lVar5 != 0; lVar5 = lVar5 + -1) {
+    if (local_88 != (undefined1 *)0x0) {
+    if ((ulonglong)local_80._2_2_ != 0) {
+    for (; lVar5 != 0; lVar5 = lVar5 + -1) {
+    return iVar2;
+
+===== 0x03d200 (41 行) =====
+  调用: 0x03d200x3, 0x0456a0x2, 0x03bbc0x1, 0x045d10x1
+    if (param_4 != 0) {
+    do {
+    lVar4 = uVar3 * 0x30 + param_3;
+    if (iVar1 != 0) {
+    return;
+    if (iVar1 != 0) {
+    return;
+    if (iVar1 == 0) {
+    return;
+
+===== 0x03e180 (131 行) =====
+  调用: 0x03e180x3, 0x046600x2, 0x039080x2, 0x03ceb0x1, 0x03dce0x1, 0x03d2e0x1, 0x03bbc0x1, 0x03a610x1, 0x0c8950x1
+    if ((iVar4 == 0) && (iVar4 = FUN_7ffa1b046600(param_4,param_1 + 0x38), iVar4 == 0)) {
+    if ((*(longlong *)(param_1 + 0xb0) == 0) || (*(longlong *)(param_1 + 0xb8) != 0))
+    goto LAB_7ffa1b03e23a;
+    if (4 < bVar7) {
+    if (uVar9 <= bVar7) {
+    if ((!bVar1) || (lVar5 = *(longlong *)(param_1 + 0xb0), lVar5 == 0)) {
+    if (lVar5 == 0) {
+    goto LAB_7ffa1b03e3ce;
+    if (bVar10 != 0) {
+    do {
+    if (iVar4 != 0) goto LAB_7ffa1b03e3ce;
+    if (bVar1) {
+    if (iVar4 == 0) {
+    if ((iVar4 == 0) && (iVar4 = FUN_7ffa1b03bbc0(param_1,param_2,local_198[0]), iVar4 == 0)) {
+    if (lVar5 != *(longlong *)(param_1 + 0xb0)) {
+    if (lVar6 != 0) {
+    if (bVar10 != 0) {
+    do {
+    if (iVar4 != 0) {
+    return iVar4;

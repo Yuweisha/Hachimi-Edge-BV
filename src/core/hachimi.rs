@@ -804,8 +804,21 @@ pub struct GlobalCharReplaceConfig {
     pub replace_in_cutscene: bool,
     #[serde(default = "Config::default_true")]
     pub auto_dress: bool,
+    /// 是否在比赛场景（ctrl=1）里替换角色。
+    /// 默认 false —— 实测比赛里替换会让画面出现彩色横条/色块，且污染后续场景直到重开游戏。
     #[serde(default)]
-    pub replace_model_in_cutscene: bool,
+    pub replace_in_race: bool,
+    /// 套动作：角色被替换后，动作资源也一起换成新角色的。
+    /// 路径形如 3d/motion/event/body/chara/chr1011_00/anm，把 chr{N} 段换成 new_char_id。
+    #[serde(default = "Config::default_true")]
+    pub replace_motion: bool,
+    /// 保留原角色动作：模型换成新角色，但动作仍用原角色的 clip。
+    ///
+    /// 原理：`_motionDressId` 决定动作资源按哪个角色/服装的 rig 去找。
+    /// 默认它被设成替换后的 dress，于是动作也跟着换成新角色；
+    /// 打开本项后保持原值，模型换新、动作沿用旧的（Unity 会做 retarget）。
+    #[serde(default)]
+    pub keep_original_motion: bool,
     #[serde(default)]
     pub data: Vec<GlobalCharReplaceEntry>,
 }
@@ -818,7 +831,9 @@ impl Default for GlobalCharReplaceConfig {
             song_force_chara: 0,
             replace_in_cutscene: false,
             auto_dress: true,
-            replace_model_in_cutscene: false,
+            replace_in_race: false,
+            replace_motion: true,
+            keep_original_motion: false,
             data: Vec::new(),
         }
     }
@@ -1037,6 +1052,11 @@ pub struct Config {
 
     #[serde(default = "Config::default_intercept_error_dialog")]
     pub intercept_error_dialog: bool,
+    /// 拦截游戏的资源自动清理（语音/模型等已下载文件不再被删）。
+    /// 默认 **false** = 只打日志（`[cleanup]`）观察触发时机，不拦。
+    /// 确认这些调用确实是「自动清理」而不是「修复资源」按钮后，再改 true。
+    #[serde(default)]
+    pub block_asset_cleanup: bool,
 
     // theme settings
     #[serde(default = "Config::default_ui_accent")]

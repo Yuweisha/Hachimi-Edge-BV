@@ -3,6 +3,8 @@ pub mod TextId;
 pub mod StoryRaceTextAsset;
 mod LyricsController;
 pub mod StoryTimelineData;
+pub mod StallWatchdog;
+pub mod StoryMotionPath;
 #[cfg(target_os = "windows")]
 pub mod ErrorSkip;
 pub mod LiveUnlock;
@@ -71,9 +73,14 @@ mod LiveTheaterCharaSelect;
 mod LiveTheaterViewController;
 mod LiveTheaterUnlock;
 mod CharacterNoteUnlock;
+pub mod GachaBannerSuppress;
 pub mod MovieProbe;
 pub mod CySpringController;
 mod LiveUtil;
+/// Live 动作数据借用：hook `MasterCharacterSystemText.GetBySystemTextId`。
+/// 安卓上 il2cpp 静态方法带隐藏的 `MethodInfo*` 参数，hook 里必须透传，
+/// 否则加载到 100% 时在 memcpy 里 SIGSEGV（见该文件内的签名说明）。
+mod LiveMotionDataBorrow;
 pub mod MasterDataUtil;
 pub mod DialogCommonBase;
 pub mod DialogObject;
@@ -106,7 +113,13 @@ pub mod LiveTimelineKeyCameraPositionData;
 mod LiveTimelineKeyCameraLookAtData;
 #[cfg(target_os = "windows")]
 mod LiveTimelineKeyMultiCameraPositionData;
-mod CharacterBuildInfo;
+pub(crate) mod CharacterBuildInfo;
+/// 模型组装 API 探针：依赖 GameAssembly.dll / kernel32，仅 Windows 编译。
+#[cfg(target_os = "windows")]
+pub mod ModelLoaderProbe;
+pub mod AssetCheck;
+pub mod MotionReplace;
+pub mod AssetCleanupGuard;
 #[cfg(target_os = "windows")]
 mod CharacterObject;
 #[cfg(target_os = "windows")]
@@ -210,6 +223,7 @@ pub fn init() {
     StoryRaceTextAsset::init(image);
     LyricsController::init(image);
     StoryTimelineData::init(image);
+    StoryMotionPath::init(image);
     StoryTimelineBlockData::init(image);
     StoryTimelineTrackData::init(image);
     StoryTimelineTextClipData::init(image);
@@ -261,9 +275,11 @@ pub fn init() {
     LiveTheaterViewController::init(image);
     LiveTheaterUnlock::init(image);
                     CharacterNoteUnlock::init(image);
+    GachaBannerSuppress::init(image);
     MovieProbe::init(image);
     CySpringController::init(image);
     LiveUtil::init(image);
+    LiveMotionDataBorrow::init(image);
     MasterDataUtil::init(image);
     DialogCommonBase::init(image);
     DialogObject::init(image);
@@ -278,6 +294,11 @@ pub fn init() {
     LowResolutionCamera::init(image);
     TapEffectController::init(image);
     CharacterBuildInfo::init(image);
+    #[cfg(target_os = "windows")]
+    ModelLoaderProbe::init(image);     // 模型组装 API 探针
+    AssetCheck::init(image);
+    MotionReplace::init(image);       // 套动作替换
+    // AssetCleanupGuard::init(image);   // 已改为独立插件 assetcleanupguard.dll
 
     #[cfg(target_os = "windows")]
     {
